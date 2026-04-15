@@ -29,7 +29,7 @@ class Main:
         self.LOOP_RATE = 1 / float(loop_rate)
         
         self.action_queue = queue.Queue()
-        
+
         self.is_running = True
         
         self.start()
@@ -39,11 +39,40 @@ class Main:
         print("loop Loop Started")
             
     def start(self):
-        # ANY PRESTART CODE GOES HERE
+        # Go to home
+        # Get initial camera frame once at home -- FUNCTION
+        #   Camera Calibration
+        # Save positions for Pour Cup & Fill Cup in world & camera frame -- FUNCTION
+        #   World 0,0,0 at arm base
+        # Set state to WAITING
+
         pass        
         
     def loop(self):        
-        # ANY ADDITIONAL LOOP CODE GOES HERE    
+        # if state == ACTING
+        #   do actions until list is complete
+        #   Set state to waiting
+        # elif state == WAITING
+        #   command input method  --  Button / Screen / Etc...
+        #   command -> add list of actions
+        #       Go to first cup
+        #           Trajectory generation
+        #           Movement
+        #       Pick up cup
+        #       Move up
+        #           Trajectory generation
+        #           Movement
+        #       Go to pour location
+        #           Trajectory generation
+        #           Movement
+        #       Pour
+        #       Straighten
+        #       Move back
+        #           Trajectory generation
+        #           Movement
+        #       Put down bup
+        #   Set state to acting
+        
         pass
     
     # DO NOT TOUCH
