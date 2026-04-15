@@ -37,7 +37,15 @@ class Main:
         self.background_thread = threading.Thread(target=self._start_loop, daemon=True)
         self.background_thread.start()
         print("loop Loop Started")
+            
+    def start(self):
+        # ANY PRESTART CODE GOES HERE
+        pass        
         
+    def loop(self):        
+        # ANY ADDITIONAL LOOP CODE GOES HERE    
+        pass
+    
     # DO NOT TOUCH
     def _start_loop(self):
         try:
@@ -59,14 +67,6 @@ class Main:
         self.kinova_robot.set_torque(True)
         self.kinova_robot.stop()
         sys.exit(0)
-            
-    def start(self):
-        # ANY PRESTART CODE GOES HERE
-        pass        
-        
-    def loop(self):        
-        # ANY ADDITIONAL LOOP CODE GOES HERE    
-        pass
             
 
 if __name__ == "__main__":
