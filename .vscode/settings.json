@@ -6,18 +6,12 @@
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
         "uv.lock": true,
-        "pyproject.toml": true,
         "kortex_api-2.3.0.post34-py3-none-any.whl": true,
-        ".python-version": true,
-        ".gitignore": true,
         "images": true
     },
     "hide-files.files": [
         "uv.lock",
-        "pyproject.toml",
         "kortex_api-2.3.0.post34-py3-none-any.whl",
-        ".python-version",
-        ".gitignore",
         "images"
     ]
 }

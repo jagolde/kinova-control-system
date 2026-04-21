@@ -10,3 +10,4 @@ wheels/
 .venv
 
 fun.py
+personal_example.py

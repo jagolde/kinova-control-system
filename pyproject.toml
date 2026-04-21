@@ -3,12 +3,13 @@ name = "kinova-control-system"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.9.*"
 dependencies = [
     "kortex-api",
     "nptyping>=2.0.1",
-    "numpy>=2.4.4",
+    "numpy<2.0.0",
     "pybullet>=3.2.7",
+    "protobuf<=3.20.3",
 ]
 
 [tool.uv.sources]
