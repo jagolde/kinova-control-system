@@ -1,5 +1,8 @@
 import pyrealsense2 as rs
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 from scipy import linalg
 from machinevisiontoolbox.base import *
@@ -9,7 +12,7 @@ from spatialmath import *
 import cv2 as cv
 
 class CameraBase:
-    def __init__(self, cameraPosition=[0.5, 0, 0.5], w=640, h=480):
+    def __init__(self, cameraPosition, w, h):
 
         # Basic camera information
         self.position = cameraPosition
@@ -19,6 +22,7 @@ class CameraBase:
         # Different depending on sim or realsense
         self.K = None
         self.distortion = None
+        self.cam_to_world = None  # set by subclass in start()
 
         # List of all IDs and dictionaries of all transformation, rotation, and world position for each
         self.ids = []
@@ -41,15 +45,14 @@ class CameraBase:
         corners, self.ids, _ = detector.detectMarkers(gray)
 
         if self.ids is not None:
+            cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
+            plt.imshow(rgb)
+            plt.show()
+
+        if self.ids is not None:
             rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
                 corners, 0.05, self.K, self.distortion
             )
-
-            # PyBullet view matrix is 16-element column-major: world -> OpenGL camera
-            # OpenGL: Y-up, Z-backward.  OpenCV: Y-down, Z-forward.  Flip Y and Z.
-            V = np.array(self.view).reshape(4, 4).T
-            M_flip = np.diag([1.0, -1.0, -1.0, 1.0])
-            cam_to_world = np.linalg.inv(V) @ M_flip
 
             for i, marker_id in enumerate(self.ids):
                 mid = int(marker_id[0])
@@ -61,7 +64,10 @@ class CameraBase:
                 self.Ts[mid] = T
 
                 p_cam = np.append(tvecs[i][0], 1.0)
-                self.world_positions[mid] = (cam_to_world @ p_cam)[:3]
+                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+
+    def undistort(self, img):
+        return cv.undistort(img, self.K, self.distortion, None, None)
 
     def start(self):
         return None
@@ -71,26 +77,43 @@ class CameraBase:
 
 
 class RealsenseCamera(CameraBase):
-    def __init__(self, width=640, height=480, fps=30):
-        self.width = width
-        self.height = height
+    @staticmethod
+    def is_connected():
+        return len(rs.context().devices) > 0
+
+    def __init__(self, cameraPosition=[0.5, 0, 0.5], orientation=np.eye(3), w=640, h=480, fps=30):
+        super().__init__(cameraPosition, w, h)
         self.fps = fps
         self.pipeline = None
         self.align = None
 
+        # Build cam_to_world from position + orientation (rotation matrix, camera frame -> world frame)
+        self.cam_to_world = np.eye(4)
+        self.cam_to_world[:3, :3] = orientation
+        self.cam_to_world[:3, 3] = cameraPosition
+
     def start(self):
         self.pipeline = rs.pipeline()
         config = rs.config()
-        config.enable_stream(rs.stream.color, self.width,
-                             self.height, rs.format.bgr8, self.fps)
-        config.enable_stream(rs.stream.depth, self.width,
-                             self.height, rs.format.z16, self.fps)
+        config.enable_stream(rs.stream.color, self.w,
+                             self.h, rs.format.bgr8, self.fps)
+        config.enable_stream(rs.stream.depth, self.w,
+                             self.h, rs.format.z16, self.fps)
         profile = self.pipeline.start(config)
 
         # Align the depth frame to the color frame for easier pixel correspondence
         self.align = rs.align(rs.stream.color)
 
-        self.calibration()
+        # Read factory intrinsics directly from the camera
+        intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+        self.K = np.array([[intr.fx, 0, intr.ppx],
+                           [0, intr.fy, intr.ppy],
+                           [0, 0, 1]], dtype=np.float64)
+        self.distortion = np.array(intr.coeffs, dtype=np.float64)
+
+        # Discard frames while auto-exposure and auto-white-balance settle
+        for _ in range(30):
+            self.pipeline.wait_for_frames()
 
         return profile
 
@@ -172,8 +195,8 @@ class RealsenseCamera(CameraBase):
 
 
 class SimCamera(CameraBase):
-    def __init__(self, kinova, fov=60, w=640, h=480, nearLimit=0.01, farLimit=5, cameraPosition=[0.5, 0, 0.5], targetPosition=[0, 0, 0]):
-        super().__init__(cameraPosition=cameraPosition, w=w, h=h)
+    def __init__(self, kinova=None, fov=60, w=640, h=480, nearLimit=0.01, farLimit=5, cameraPosition=[0.5, 0, 0.5], targetPosition=[0, 0, 0]):
+        super().__init__(cameraPosition, w, h)
 
         self.targetPosition = targetPosition
         self.fov = fov
@@ -196,6 +219,12 @@ class SimCamera(CameraBase):
                           [0, 0, 1]], dtype=np.float64)
         self.distortion = np.zeros((4, 1))
 
+        # PyBullet view matrix is 16-element column-major: world -> OpenGL camera
+        # OpenGL: Y-up, Z-backward.  OpenCV: Y-down, Z-forward.  Flip Y and Z.
+        V = np.array(self.view).reshape(4, 4).T
+        M_flip = np.diag([1.0, -1.0, -1.0, 1.0])
+        self.cam_to_world = np.linalg.inv(V) @ M_flip
+
         return None
 
     def get_frames(self):
@@ -205,7 +234,7 @@ class SimCamera(CameraBase):
 
         w, h, rgba, depth, seg = self.p.getCameraImage(
             640, 480, self.view, self.proj)
-        rgb = np.array(rgba, dtype=np.uint8).reshape(480, 640, 4)[:, :, :3]
+        rgb = np.array(rgba, dtype=np.uint8).reshape(480, 640, 4)[:, :, 2::-1]
         return rgb, depth
     
 

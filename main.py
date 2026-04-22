@@ -15,15 +15,15 @@ class Main(BaseApp):
         ARM_BASE = np.array([0, 0, 0])
         HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0]) # From example script
 
-        pour_cup_id = -1
-        fill_cup_id = -1
+        pour_cup_id = 1
+        fill_cup_id = 2
 
         self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
 
-        if self.sim:
-            cam = SimCamera(self.kinova_robot, cameraPosition=[0.5, 0, 2])
+        if RealsenseCamera.is_connected():
+            cam = RealsenseCamera(cameraPosition=[0.5, 0, 2])
         else:
-            cam = RealsenseCamera(self.kinova_robot, cameraPosition=[0.5, 0, 2])
+            cam = SimCamera(kinova=self.kinova_robot, cameraPosition=[0.5, 0, 2])
         
         cam.start()
 
@@ -37,9 +37,17 @@ class Main(BaseApp):
         state = "WAITING"
 
         rgb, depth = cam.get_frames()
-        print(rgb)
-        cv.imshow('rgb', rgb)
-        cv.waitKey(0)
+
+        undistorted = cam.undistort(rgb)
+        cam.find_all_markers(undistorted)
+
+        mid = int(cam.ids[0][0])
+        print(f"id: {mid}")
+        print(f"x: {cam.world_positions[mid][0]} y: {cam.world_positions[mid][1]} z: {cam.world_positions[mid][2]}")
+
+
+        # cv.imshow('rgb', rgb)
+        # cv.waitKey(0)
 
     def loop(self):
         # if state == ACTING
