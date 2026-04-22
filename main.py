@@ -41,9 +41,10 @@ class Main(BaseApp):
         undistorted = cam.undistort(rgb)
         cam.find_all_markers(undistorted)
 
-        mid = int(cam.ids[0][0])
-        print(f"id: {mid}")
-        print(f"x: {cam.world_positions[mid][0]} y: {cam.world_positions[mid][1]} z: {cam.world_positions[mid][2]}")
+        if cam.ids is not None and len(cam.ids) > 0:
+            mid = int(cam.ids[0][0])
+            print(f"id: {mid}")
+            print(f"x: {cam.world_positions[mid][0]} y: {cam.world_positions[mid][1]} z: {cam.world_positions[mid][2]}")
 
 
         # cv.imshow('rgb', rgb)
