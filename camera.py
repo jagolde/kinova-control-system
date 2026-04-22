@@ -5,10 +5,6 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 from scipy import linalg
-from machinevisiontoolbox.base import *
-from machinevisiontoolbox import *
-from spatialmath.base import *
-from spatialmath import *
 import cv2 as cv
 
 class CameraBase:
