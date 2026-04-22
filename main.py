@@ -1,51 +1,60 @@
 from backend.kinova import BaseApp
 import time
 import numpy as np
-import math
 import pyrealsense2 as rs
 import cv2 as cv
+import tkinter as tk
 
 from camera import RealsenseCamera
 from camera import SimCamera
 
+from ux_helpers import make_button
+
+POUR_CUP_ID = 1
+FILL_CUP_ID = 2
+
+FILL_CUP_OFFSET = np.array([-0.25, 0, 0])
+POUR_CUP_OFFSET = np.array([-0.25, 0, 0])
+
+ARM_BASE = np.array([0, 0, 0])
+HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0]) # From example script
+
 class Main(BaseApp):
 
     def start(self):
-
-        ARM_BASE = np.array([0, 0, 0])
-        HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0]) # From example script
-
-        pour_cup_id = 1
-        fill_cup_id = 2
-
+        
         self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
 
         if RealsenseCamera.is_connected():
-            cam = RealsenseCamera(cameraPosition=[0.5, 0, 2])
+            self.cam = RealsenseCamera(cameraPosition=[0.5, 0, 2])
         else:
-            cam = SimCamera(kinova=self.kinova_robot, cameraPosition=[0.5, 0, 2])
+            self.cam = SimCamera(kinova=self.kinova_robot, cameraPosition=[0.5, 0, 2])
         
-        cam.start()
+        self.cam.start()
 
-        rgb, _ = cam.get_frames()
+        rgb, _ = self.cam.get_frames()
+        undistorted = self.cam.undistort(rgb)
+        self.cam.find_all_markers(undistorted)
 
-        undistorted = cam.undistort(rgb)
-        cam.find_all_markers(undistorted)
+        if len(self.cam.world_positions) > 0:
+            self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
+            self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
 
-        if len(cam.world_positions) > 0:
-            pour_cup = cam.world_positions[pour_cup_id]
-            pour_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
-
-            fill_cup = cam.world_positions[fill_cup_id]
-            fill_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
-
-        state = "WAITING"
+        self.state = "WAITING"
 
     def loop(self):
-        # if state == ACTING
+        if self.state == "ACTING":
+            pass
         #   do actions until list is complete
         #   Set state to waiting
-        # elif state == WAITING
+        elif self.state == "WAITING":
+            root = tk.Tk()
+
+            button = make_button(root=root, command=self.basic_pour_button, text="Make Drink")
+            button.pack(padx=20, pady=20)
+            root.mainloop()
+
+
         #   command input method  --  Button / Screen / Etc...
         #   command -> add list of actions
         #       Go to first cup
@@ -65,9 +74,11 @@ class Main(BaseApp):
         #           Movement
         #       Put down bup
         #   Set state to acting
-
-        pass
-
+    
+    def basic_pour_button(self, root):
+        # Add commands
+        self.state = "ACTING"
+        root.destroy()
 
 if __name__ == "__main__":
     final_project = Main(
