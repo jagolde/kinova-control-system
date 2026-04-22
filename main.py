@@ -27,6 +27,11 @@ class Main(BaseApp):
         
         cam.start()
 
+        rgb, _ = cam.get_frames()
+
+        undistorted = cam.undistort(rgb)
+        cam.find_all_markers(undistorted)
+
         if len(cam.world_positions) > 0:
             pour_cup = cam.world_positions[pour_cup_id]
             pour_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
@@ -35,20 +40,6 @@ class Main(BaseApp):
             fill_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
 
         state = "WAITING"
-
-        rgb, depth = cam.get_frames()
-
-        undistorted = cam.undistort(rgb)
-        cam.find_all_markers(undistorted)
-
-        if cam.ids is not None and len(cam.ids) > 0:
-            mid = int(cam.ids[0][0])
-            print(f"id: {mid}")
-            print(f"x: {cam.world_positions[mid][0]} y: {cam.world_positions[mid][1]} z: {cam.world_positions[mid][2]}")
-
-
-        # cv.imshow('rgb', rgb)
-        # cv.waitKey(0)
 
     def loop(self):
         # if state == ACTING
