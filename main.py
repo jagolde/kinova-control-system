@@ -1,19 +1,47 @@
 from backend.kinova import BaseApp
 import time
+import numpy as np
+import math
+import pyrealsense2 as rs
+import cv2 as cv
+
+from camera import RealsenseCamera
+from camera import SimCamera
 
 class Main(BaseApp):
 
     def start(self):
-        # Go to home
-        # Get initial camera frame once at home -- FUNCTION
-        #   Camera Calibration
-        # Save positions for Pour Cup & Fill Cup in world & camera frame -- FUNCTION
-        #   World 0,0,0 at arm base
-        # Set state to WAITING
 
-        pass        
+        ARM_BASE = np.array([0, 0, 0])
+        HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0]) # From example script
+
+        pour_cup_id = -1
+        fill_cup_id = -1
+
+        self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
+
+        if self.sim:
+            cam = SimCamera(self.kinova_robot, cameraPosition=[0.5, 0, 2])
+        else:
+            cam = RealsenseCamera(self.kinova_robot, cameraPosition=[0.5, 0, 2])
         
-    def loop(self):        
+        cam.start()
+
+        if len(cam.world_positions) > 0:
+            pour_cup = cam.world_positions[pour_cup_id]
+            pour_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
+
+            fill_cup = cam.world_positions[fill_cup_id]
+            fill_cup_offset = np.array([-0.25, 0, 0]) # April tag offset
+
+        state = "WAITING"
+
+        rgb, depth = cam.get_frames()
+        print(rgb)
+        cv.imshow('rgb', rgb)
+        cv.waitKey(0)
+
+    def loop(self):
         # if state == ACTING
         #   do actions until list is complete
         #   Set state to waiting
@@ -37,14 +65,16 @@ class Main(BaseApp):
         #           Movement
         #       Put down bup
         #   Set state to acting
-        
+
         pass
 
+
 if __name__ == "__main__":
-    final_project = Main()
+    final_project = Main(
+        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:
-            time.sleep(0.1)  
+            time.sleep(0.1)
     except KeyboardInterrupt:
         final_project.shutdown()

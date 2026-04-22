@@ -530,6 +530,7 @@ class BaseApp:
         self.kinova_robot = Kinova(
             is_suction=is_suction, simulate=simulate, urdf_path=urdf_path
         )
+        self.sim = simulate
         self.LOOP_RATE = 1 / float(loop_rate)
         self.action_queue = queue.Queue()
         self.is_running = True
