@@ -142,7 +142,8 @@ def euler_to_rotm(rpy: tuple):
     return R_z @ R_y @ R_x
 
 def check_joint_limits(theta, theta_limits):
-    """Checks if the joint angles are within the specified limits.
+    """
+    Checks if the joint angles are within the specified limits.
 
     Args:
         theta (List[float]): Current joint angles.
@@ -380,7 +381,9 @@ def calc_inverse_kinematics(ee, joint_values=None, soln=0):
     return solutions[0]
 
 def normalize_angle(angle):
-    """Normalize an angle to the range (-pi, pi]."""
+    """
+    Normalize an angle to the range (-pi, pi].
+    """
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
 def jacobian(joint_values: list):
