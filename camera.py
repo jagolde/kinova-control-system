@@ -1,5 +1,6 @@
 import pyrealsense2 as rs
 import numpy as np
+import copy
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -61,6 +62,34 @@ class CameraBase:
 
                 p_cam = np.append(tvecs[i][0], 1.0)
                 self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+
+    def calibrate_from_marker(self, rgb, marker_id=3, marker_position=[0,0,0.5], marker_size=0.05):
+        '''
+        Detects a specific base marker and calculates camera position based on that
+        '''
+        gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
+        aruco_dict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_36H11)
+        detector = cv.aruco.ArucoDetector(aruco_dict, cv.aruco.DetectorParameters())
+        corners, ids, _ = detector.detectMarkers(gray)
+
+        if ids is None:
+            return False
+
+        ids_flat = ids.flatten()
+        if marker_id not in ids_flat:
+            return False
+
+        idx = np.where(ids_flat == marker_id)[0][0]
+        rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
+            [corners[idx]], marker_size, self.K, self.distortion
+        )
+
+        R, _ = cv.Rodrigues(rvecs[0])
+        T_marker_cam = np.vstack((np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
+
+        self.cam_to_world = marker_pose_in_world @ np.linalg.inv(T_marker_cam)
+        self.position = self.cam_to_world[:3, 3]
+        return True
 
     def undistort(self, img):
         return cv.undistort(img, self.K, self.distortion, None, None)
@@ -141,7 +170,11 @@ class RealsenseCamera(CameraBase):
         '''
         Calibrates the camera to adjust for distortion
         '''
-        images = ImageCollection("./calibration_photos/*.png")
+        
+        images = []
+
+        for i in range(3):
+            images.append(cv.imread(f"calibration_photos/img{i}", cv.IMREAD_COLOR))
 
         gridshape = (9, 6)
         squaresize = 24e-3
@@ -163,7 +196,7 @@ class RealsenseCamera(CameraBase):
 
         # loop through the images and find the corners
         for i, image in enumerate(images):
-            gray = image.mono().A
+            gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
 
             # Find the chess board corners
             ret, corners = cv.findChessboardCorners(gray, gridshape, None)
@@ -176,11 +209,9 @@ class RealsenseCamera(CameraBase):
                 imgpoints.append(corners)
 
                 # Draw the corners
-                image = Image(image, copy=True)
-                if not image.iscolor:
-                    image = image.colorize()
+                image = copy.copy(image)
                 corner_images.append(
-                    cv.drawChessboardCorners(image.A, gridshape, corners2, ret)
+                    cv.drawChessboardCorners(image, gridshape, corners2, ret)
                 )
                 valid.append(i)
 
