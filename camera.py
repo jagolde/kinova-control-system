@@ -87,7 +87,7 @@ class CameraBase:
         R, _ = cv.Rodrigues(rvecs[0])
         T_marker_cam = np.vstack((np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
 
-        self.cam_to_world = marker_pose_in_world @ np.linalg.inv(T_marker_cam)
+        self.cam_to_world = marker_position @ np.linalg.inv(T_marker_cam)
         self.position = self.cam_to_world[:3, 3]
         return True
 
