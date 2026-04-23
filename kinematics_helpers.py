@@ -157,7 +157,7 @@ def check_joint_limits(theta, theta_limits):
             return False
     return True
 
-def sample_valid_joints(robot, n_tries: int = 1000):
+def sample_valid_joints(n_tries: int = 1000):
     """
     Sample a random joint configuration that satisfies the robot's joint limits.
 
@@ -337,7 +337,7 @@ def calc_inverse_kinematics(ee, joint_values=None, soln=0):
             # Calculate Rotation of Frame 3 (R_03)
             q_temp = [theta_1, theta_2, theta_3, 0, 0, 0]
             H_cumulative, _ = compute_transforms(q_temp)
-            R_03 = H_cumulative[4][:3, :3]
+            R_03 = H_cumulative[3][:3, :3]
             
             R_36 = R_03.T @ R_06
             
