@@ -42,7 +42,7 @@ class Main(BaseApp):
         undistorted = self.cam.undistort(rgb)
 
         # Calculate camera position from Base april tag
-        self.cam.calibrate_from_marker()
+        self.cam.calibrate_from_marker(rgb)
 
         # Finds all markers world positions
         self.cam.find_all_markers(undistorted)
