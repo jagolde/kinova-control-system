@@ -12,7 +12,6 @@ from ux_helpers import make_button
 from kinematics_helpers import (
     EndEffector,
     calc_forward_kinematics,
-    calc_inverse_kinematics,
     calc_numerical_ik,
 )
 
