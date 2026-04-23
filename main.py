@@ -51,12 +51,19 @@ class Main(BaseApp):
             self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
 
         self.state = "WAITING"
+        self.queue = []
 
     def loop(self):
         if self.state == "ACTING":
             pass
         #   do actions until list is complete
         #   Set state to waiting
+            while self.queue:
+                next_position = self.queue.pop(0)
+                if self.queue:
+                    self.kinova_robot.set_joint_angles(next_position, gripper_percentage=0)
+                else:
+                    self.kinova_robot.set_joint_angles(next_position, gripper_percentage=100)
         elif self.state == "WAITING":
             root = tk.Tk()
 
@@ -86,7 +93,14 @@ class Main(BaseApp):
         #   Set state to acting
     
     def basic_pour_button(self, root):
-        # Add commands
+        # Generate list of positions from desired end effector position
+        curr_angles = self.kinova_robot.get_joint_angles()
+        curr_position = calc_forward_kinematics(curr_angles)
+        
+        # find desired location from aruco marker
+        # make two steps before desired location: move backward and move up
+
+        self.queue = np.linspace(curr_position, move_up_step, num=50)
         self.state = "ACTING"
         root.destroy()
 
