@@ -13,7 +13,6 @@ from ui_helpers import make_button
 from kinematics_helpers import (
     EndEffector,
     calc_forward_kinematics,
-    calc_inverse_kinematics,
     calc_numerical_ik,
 )
 
@@ -65,6 +64,7 @@ class Main(BaseApp):
                 self.action_index += 1
             else:
                 self.state = "WAITING"
+
         elif self.state == "WAITING":
             root = tk.Tk()
 
@@ -72,27 +72,6 @@ class Main(BaseApp):
             button.pack(padx=20, pady=20)
             root.mainloop()
 
-
-        #   command input method  --  Button / Screen / Etc...
-        #   command -> add list of actions
-        #       Go to first cup
-        #           Trajectory generation
-        #           Movement
-        #       Pick up cup
-        #       Move up
-        #           Trajectory generation
-        #           Movement
-        #       Go to pour location
-        #           Trajectory generation
-        #           Movement
-        #       Pour
-        #       Straighten
-        #       Move back
-        #           Trajectory generation
-        #           Movement
-        #       Put down bup
-        #   Set state to acting
-    
     def basic_pour_button(self, root):
         self.action_steps = np.array([], dtype=object)
         self.action_index = 0
@@ -113,11 +92,21 @@ class Main(BaseApp):
         # Close gripper
         self.action_steps = np.append(self.action_steps, [(self.kinova_robot.close_gripper, (True,))])
 
+        # find desired location from aruco marker
+        # make two steps before desired location: move backward and move up
+
         self.state = "ACTING"
         root.destroy()
     
     def move(self, ee):
-        pass
+        """Move to end effector position using inverse kinematics"""
+        curr_angles = self.kinova_robot.get_joint_angles()
+        
+        # Calculate inverse kinematics for the target end effector position
+        next_angles = calc_numerical_ik(ee, curr_angles)
+        
+        # Move to the calculated joint angles
+        self.kinova_robot.set_joint_angles(next_angles, gripper_percentage=0)
 
 if __name__ == "__main__":
     final_project = Main(

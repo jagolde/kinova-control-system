@@ -8,12 +8,12 @@ joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         
 # Joint limits (in radians)
 joint_limits = [
-    [-2 * np.pi, 2 * np.pi],
-    [-0.71 * np.pi, 0.71 * np.pi],
-    [-0.82 * np.pi, 0.82 * np.pi],
-    [-2 * np.pi, 2 * np.pi],
-    [-0.66 * np.pi, 0.66 * np.pi],
-    [-2 * np.pi, 2 * np.pi],
+    [deg2rad(-154.1), deg2rad(154.1)],
+    [deg2rad(-150.1), deg2rad(150.1)],
+    [deg2rad(-150.1), deg2rad(150.1)],
+    [deg2rad(-148.98), deg2rad(148.98)],
+    [deg2rad(-144.97), deg2rad(145)],
+    [deg2rad(-148.98), deg2rad(148.98)],
 ]
 
 num_dof = 6
@@ -195,7 +195,7 @@ def compute_transforms(joint_values):
     # DH parameters
     # Note: The Kinova model uses 7 frames for 6 joints (Frame 0 is base offset)
     DH = np.array([
-        [theta[0], 0.1283+0.115, 0, pi/2],
+        [theta[0]-(pi/2), 0.1283+0.115, 0, pi/2],
         [theta[1]+(pi/2), 0.03, 0.280, pi],
         [theta[2]+(pi/2), 0.02, 0, pi/2],
         [theta[3]+(pi/2), 0.140+0.105, 0, pi/2],
@@ -244,7 +244,7 @@ def calc_forward_kinematics(joint_values: list, radians=True):
 
     return ee, Hlist
 
-def calc_numerical_ik(ee, joint_values, tol=0.002, ilimit=100):
+def calc_numerical_ik(ee, joint_values, pos_tol=0.01, ori_tol=0.01, ilimit=200):
     """
     Numerical IK with angles wrapped to [-pi, pi] and joint limit enforcement.
 
@@ -258,21 +258,30 @@ def calc_numerical_ik(ee, joint_values, tol=0.002, ilimit=100):
         list[float]: Estimated joint angles in radians, wrapped to [-pi, pi] and within joint limits.
     """
     # unpack end effector position and rotation
-    x_target, y_target, z_target = ee.x, ee.y, ee.z
+    x_target, y_target, z_target, xrot_target, yrot_target, zrot_target = ee.x, ee.y, ee.z, ee.rotx, ee.roty, ee.rotz
     new_joint_values = np.array(joint_values, dtype=float)
 
-    for _ in range(100):  # allow 100 attempted starting configurations
+    for _ in range(200):  # allow 100 attempted starting configurations
         for _ in range(ilimit): # 100 iterations for each attempted configuration
             # get the end effector position based on the current joint guess and find the error from the desired position
             current_ee, _ = calc_forward_kinematics(new_joint_values)
-            error = np.array([x_target, y_target, z_target]) - np.array([current_ee.x, current_ee.y, current_ee.z])
+            pos_error = np.array([x_target, y_target, z_target]) - np.array([current_ee.x, current_ee.y, current_ee.z])
+            def angle_diff(a, b):
+                d = a - b
+                return (d + np.pi) % (2*np.pi) - np.pi
 
+            orient_error = np.array([
+                angle_diff(xrot_target, current_ee.rotx),
+                angle_diff(yrot_target, current_ee.roty),
+                angle_diff(zrot_target, current_ee.rotz)
+            ])
+            error = np.concatenate((pos_error,orient_error),axis=0)
             # if the error is within tolerance, return the joint angle solution
-            if np.linalg.norm(error) <= tol:
+            if np.linalg.norm(pos_error) <= pos_tol and np.linalg.norm(orient_error) <= ori_tol:
                 return new_joint_values
-
             # get next iteration by updating with inverse jacobian
             new_joint_values += inverse_jacobian(new_joint_values) @ error
+            
 
             # enforce joint limits
             for i, (low, high) in enumerate(joint_limits):
@@ -284,101 +293,101 @@ def calc_numerical_ik(ee, joint_values, tol=0.002, ilimit=100):
     # return null if not converged
     return np.zeros(len(joint_values))
 
-def calc_inverse_kinematics(ee, joint_values=None, soln=0):
-    """
-    Calculates the analytical inverse position kinematics for the 6-DOF Kinova manipulator.
-    Utilizes kinematic decoupling via the spherical wrist to compute the closed-form 
-    solution governed by the explicitly requested geometric root.
-    """
-    p_ee = np.array([ee.x, ee.y, ee.z])
-    R_06 = euler_to_rotm([ee.rotx, ee.roty, ee.rotz])
-    d_6 = l6 + l7
-    
-    # Wrist Position
-    p_wrist = p_ee - d_6 * (R_06 @ np.array([0, 0, 1]))
-    wx, wy, wz = p_wrist[0], p_wrist[1], p_wrist[2]
-
-    solutions = []
-
-    theta1_configs = [
-        (-atan2(wy, wx), np.sqrt(wx**2 + wy**2)),
-        (-atan2(-wy, -wx), -np.sqrt(wx**2 + wy**2))
-    ]
-
-    for theta_1, r in theta1_configs:
-        s = wz - (l1 + l2) # Height relative to shoulder
+def calc_inverse_kinematics(self, ee, joint_values=None, soln=0):
+        """
+        Calculates the analytical inverse position kinematics for the 6-DOF Kinova manipulator.
+        Utilizes kinematic decoupling via the spherical wrist to compute the closed-form 
+        solution governed by the explicitly requested geometric root.
+        """
+        p_ee = np.array([ee.x, ee.y, ee.z])
+        R_06 = euler_to_rotm([ee.rotx, ee.roty, ee.rotz])
+        d_6 = self.l6 + self.l7
         
-        # Law of Cosines for Elbow (beta) and Shoulder (alpha)
-        l_proximal = l3
-        l_distal = l4 + l5
-        L_sq = r**2 + s**2
-        
-        # Check reachability
-        numerator = l_proximal**2 + l_distal**2 - L_sq
-        denominator = 2 * l_proximal * l_distal
-        if abs(numerator) > abs(denominator):
-            continue
+        # Wrist Position
+        p_wrist = p_ee - d_6 * (R_06 @ np.array([0, 0, 1]))
+        wx, wy, wz = p_wrist[0], p_wrist[1], p_wrist[2]
 
-        cos_beta = numerator / denominator
-        beta = np.arccos(cos_beta)
+        solutions = []
 
-        # 2. Elbow Config (Up vs Down)
-        for theta_3 in [np.pi - beta, -(np.pi - beta)]:
-            
-            # alpha: Interior angular offset 
-            alpha = np.arctan2(l_distal * np.sin(theta_3), l_proximal + l_distal * np.cos(theta_3))
+        theta1_configs = [
+            (-atan2(wy, wx), np.sqrt(wx**2 + wy**2)),
+            (-atan2(-wy, -wx), -np.sqrt(wx**2 + wy**2))
+        ]
 
-            # gamma: Absolute angular trajectory
-            gamma = np.arctan2(s, r)
+        for theta_1, r in theta1_configs:
+            s = wz - (self.l1 + self.l2) # Height relative to shoulder
+            
+            # Law of Cosines for Elbow (beta) and Shoulder (alpha)
+            l_proximal = self.l3
+            l_distal = self.l4 + self.l5
+            L_sq = r**2 + s**2
+            
+            # Check reachability
+            numerator = l_proximal**2 + l_distal**2 - L_sq
+            denominator = 2 * l_proximal * l_distal
+            if abs(numerator) > abs(denominator):
+                continue
 
-            # theta_2
-            theta_2 = (np.pi / 2) - (gamma - alpha)
-            
-            # Calculate Rotation of Frame 3 (R_03)
-            q_temp = [theta_1, theta_2, theta_3, 0, 0, 0]
-            H_cumulative, _ = compute_transforms(q_temp)
-            R_03 = H_cumulative[3][:3, :3]
-            
-            R_36 = R_03.T @ R_06
-            
-            # Wrist Config (Positive vs Negative sine for theta_5)
-            c5 = -R_36[2, 2]
-            s5_mag = np.sqrt(np.clip(1 - c5**2, 0, 1))
-            
-            for s5 in [s5_mag, -s5_mag]:
-                theta_5 = atan2(s5, c5)
+            cos_beta = numerator / denominator
+            beta = np.arccos(cos_beta)
+
+            # 2. Elbow Config (Up vs Down)
+            for theta_3 in [np.pi - beta, -(np.pi - beta)]:
                 
-                if abs(s5) > 1e-6:
-                    theta_4 = atan2(-R_36[1, 2], -R_36[0, 2])
-                    theta_6 = atan2(-R_36[2, 1], -R_36[2, 0])
-                else:
-                    # Gimbal lock
-                    theta_4 = 0
-                    theta_6 = atan2(R_36[1, 0], R_36[0, 0])
+                # alpha: Interior angular offset 
+                alpha = np.arctan2(l_distal * np.sin(theta_3), l_proximal + l_distal * np.cos(theta_3))
 
-                candidate_q = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
-                candidate_q = [normalize_angle(q) for q in candidate_q]
+                # gamma: Absolute angular trajectory
+                gamma = np.arctan2(s, r)
 
-                # Check limits
-                if check_joint_limits(candidate_q, joint_limits):
-                    solutions.append(candidate_q)
+                # theta_2
+                theta_2 = (np.pi / 2) - (gamma - alpha)
+                
+                # Calculate Rotation of Frame 3 (R_03)
+                q_temp = [theta_1, theta_2, theta_3, 0, 0, 0]
+                H_cumulative, _ = self._compute_transforms(q_temp)
+                R_03 = H_cumulative[4][:3, :3]
+                
+                R_36 = R_03.T @ R_06
+                
+                # Wrist Config (Positive vs Negative sine for theta_5)
+                c5 = -R_36[2, 2]
+                s5_mag = np.sqrt(np.clip(1 - c5**2, 0, 1))
+                
+                for s5 in [s5_mag, -s5_mag]:
+                    theta_5 = atan2(s5, c5)
+                    
+                    if abs(s5) > 1e-6:
+                        theta_4 = atan2(-R_36[1, 2], -R_36[0, 2])
+                        theta_6 = atan2(-R_36[2, 1], -R_36[2, 0])
+                    else:
+                        # Gimbal lock
+                        theta_4 = 0
+                        theta_6 = atan2(R_36[1, 0], R_36[0, 0])
 
-    # Sort solutions by error
-    def get_error(q):
-        fk_ee, _ = calc_forward_kinematics(q)
-        return np.linalg.norm(np.array([ee.x, ee.y, ee.z]) - np.array([fk_ee.x, fk_ee.y, fk_ee.z]))
-    
-    solutions.sort(key=get_error)
+                    candidate_q = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
+                    candidate_q = [self.normalize_angle(q) for q in candidate_q]
 
-    if not solutions:
-        return [0, 0, 0, 0, 0, 0]
+                    # Check limits
+                    if check_joint_limits(candidate_q, self.joint_limits):
+                        solutions.append(candidate_q)
 
-    # If a specific solution index is requested, return it
-    if soln < len(solutions):
-        return solutions[soln]
-    
-    # Return best solution
-    return solutions[0]
+        # Sort solutions by error
+        def get_error(q):
+            fk_ee, _ = self.calc_forward_kinematics(q)
+            return np.linalg.norm(np.array([ee.x, ee.y, ee.z]) - np.array([fk_ee.x, fk_ee.y, fk_ee.z]))
+        
+        solutions.sort(key=get_error)
+
+        if not solutions:
+            return [0, 0, 0, 0, 0, 0]
+
+        # If a specific solution index is requested, return it
+        if soln < len(solutions):
+            return solutions[soln]
+        
+        # Return best solution
+        return solutions[0]
 
 def normalize_angle(angle):
     """

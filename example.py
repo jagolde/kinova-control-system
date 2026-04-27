@@ -1,13 +1,25 @@
 from backend.kinova import BaseApp
 import numpy as np
+from kinematics_helpers import *
 
 class Main(BaseApp):
         
     def start(self):
-        self.home = False     
+        self.home = False
+        target, _ = calc_forward_kinematics([0.79, 6.11, 1.48, 1.4, 6.11, 1.57])
+        
+        self.angles = calc_numerical_ik(target,joint_values)
+        # ee = EndEffector()
+        # ee.x = 0.25
+        # ee.y = 0.25
+        # ee.z = 0.25
+        # ee.rotx = 0
+        # ee.roty = 0
+        # ee.rotz = pi/2
+        # self.angles = calc_numerical_ik(ee,joint_values)
         
     def loop(self):        
-        is_7DOF = None
+        is_7DOF = False
         
         if(is_7DOF is None):
             raise ValueError("If you are using the big robot set is_7DOF to true. If you are using the small robot set is_7DOF to false")
@@ -18,7 +30,7 @@ class Main(BaseApp):
             
         else:
             HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0])
-            next_position = np.array([0.79, 6.11, 1.48, 1.4, 6.11, 1.57])
+            next_position = self.angles
             
         if(self.home):
             self.kinova_robot.set_joint_angles(next_position, gripper_percentage=100)
@@ -29,7 +41,7 @@ class Main(BaseApp):
             self.home = True            
 
 if __name__ == "__main__":
-    simulate = None
+    simulate = False
     
     if(simulate is None):
         raise ValueError("Pick simulate or real world robot")
