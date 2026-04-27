@@ -263,6 +263,8 @@ class SimKinova:
         self.p.setGravity(0, 0, -9.81)
         self.p.loadURDF("plane.urdf")
 
+        self.sim_objects()
+
         if not self.urdf_path:
             raise ValueError("urdf_path must be provided to use simulation mode.")
 
@@ -274,6 +276,10 @@ class SimKinova:
             info = self.p.getJointInfo(self.robot_id, i)
             joint_type = info[2]
             name = info[1].decode("utf-8").lower()
+            link_name = info[12].decode("utf-8").lower()
+
+            if "workspace_indicator" in link_name: # ADDED
+                self.p.changeVisualShape(self.robot_id, i, rgbaColor=[0, 0, 0, 0]) # ADDED
 
             # If it's a movable joint
             if joint_type in [self.p.JOINT_REVOLUTE, self.p.JOINT_PRISMATIC]:
@@ -315,6 +321,15 @@ class SimKinova:
             time.sleep(1.0 / 240.0)
 
     def _execute_action(self, cmd):
+        try:
+         self._execute_action_inner(cmd)
+        except Exception as e:
+            print(f"[SimKinova] _execute_action error: {e}")
+        finally:
+            cmd["event"].set()
+            self._is_action_running = False
+
+    def _execute_action_inner(self, cmd):
         if cmd["type"] == "move":
             target_angles = cmd["angles"]
 
@@ -400,7 +415,7 @@ class SimKinova:
 
         for joint in self.gripper_joints:
             info = self.p.getJointInfo(self.robot_id, joint)
-            name = info[1].decode("utf-8").lower()
+            name = info[1].decode("utf-8").lower() # ADDED
 
             # --- THE FIX: Hardcode the Kinova 2F Gripper kinematics ---
             # 0.0 is open (neutral origin), 1.0 is closed (extreme limit)
@@ -484,6 +499,27 @@ class SimKinova:
                 self.p.disconnect()
             except:
                 pass
+    
+    def sim_objects(self):
+        p = self.p
+
+        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag0.png")
+        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag1.png")
+        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag2.png")
+
+        quad = "apriltagtextures/flat_quad.obj"
+        scale = [0.05, 0.05, 1]
+        april_tag_shape_0 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
+        april_tag_shape_1 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
+        april_tag_shape_2 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
+
+        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.5, 0.0, 0.1])
+        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.5, 0.2, 0.1])
+        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0.5, -0.2, 0.1])
+
+        p.changeVisualShape(april_tag_0, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_0)
+        p.changeVisualShape(april_tag_1, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_1)
+        p.changeVisualShape(april_tag_2, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_2)
 
 
 class Kinova:
