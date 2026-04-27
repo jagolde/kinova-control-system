@@ -310,6 +310,12 @@ class SimKinova:
             with self._data_lock:
                 self.real_angles = [state[0] for state in states]
 
+            end_effector = self.p.getLinkState(self.robot_id, 7)
+            pos = end_effector[0] # World position
+            euler = self.p.getEulerFromQuaternion(end_effector[1]) # World orientation (quaternion)
+            self.pose = np.concatenate((pos,euler),axis=0)
+            print(self.pose)
+
             # Process Actions
             if not self._is_action_running and not self.action_queue.empty():
                 cmd = self.action_queue.get()

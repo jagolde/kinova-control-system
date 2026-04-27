@@ -4,16 +4,16 @@ from numpy import *
 
 l1, l2, l3, l4, l5, l6, l7 = 0.156, 0.128, 0.410, 0.208, 0.105, 0.105, 0.0615
         
-joint_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+joint_values = [1.75, 5.76, 2.18, 2.44, 4.54, 0.0]
         
 # Joint limits (in radians)
 joint_limits = [
-    [deg2rad(-154.1), deg2rad(154.1)],
-    [deg2rad(-150.1), deg2rad(150.1)],
-    [deg2rad(-150.1), deg2rad(150.1)],
-    [deg2rad(-148.98), deg2rad(148.98)],
-    [deg2rad(-144.97), deg2rad(145)],
-    [deg2rad(-148.98), deg2rad(148.98)],
+    [0, 2*pi],
+    [0, 2*pi],
+    [0, 2*pi],
+    [0, 2*pi],
+    [0, 2*pi],
+    [0, 2*pi],
 ]
 
 num_dof = 6
@@ -244,7 +244,7 @@ def calc_forward_kinematics(joint_values: list, radians=True):
 
     return ee, Hlist
 
-def calc_numerical_ik(ee, joint_values, pos_tol=0.01, ori_tol=0.01, ilimit=200):
+def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300):
     """
     Numerical IK with angles wrapped to [-pi, pi] and joint limit enforcement.
 
@@ -280,13 +280,18 @@ def calc_numerical_ik(ee, joint_values, pos_tol=0.01, ori_tol=0.01, ilimit=200):
             if np.linalg.norm(pos_error) <= pos_tol and np.linalg.norm(orient_error) <= ori_tol:
                 return new_joint_values
             # get next iteration by updating with inverse jacobian
-            new_joint_values += inverse_jacobian(new_joint_values) @ error
-            
+            #new_joint_values += inverse_jacobian(new_joint_values) @ pos_error
+            J = jacobian(new_joint_values)
+            J_pos = J # 6x6
 
+            J_pinv = np.linalg.pinv(J_pos)  # 6x6
+
+            new_joint_values = new_joint_values + 0.1*(J_pinv @ error)
+            print(f'Error: {error}')
+            print(f"Joint Values: {new_joint_values}")
             # enforce joint limits
             for i, (low, high) in enumerate(joint_limits):
                 new_joint_values[i] = np.clip(new_joint_values[i], low, high)
-
         # if not converged, return a random configuration and try again
         new_joint_values = np.array(sample_valid_joints(), dtype=float)
     
@@ -419,10 +424,10 @@ def jacobian(joint_values: list):
     
     for i in range(num_dof):
         
-        transform = H_cumulative[i+1]
+        transform = H_cumulative[i]
         z_axis = transform[:3, 2] # Z-axis of the frame about which theta[i] rotates?
         
-        transform_axis = H_cumulative[i+1] # Frame defining the Z axis
+        transform_axis = H_cumulative[i] # Frame defining the Z axis
         
         z_axis = transform_axis[:3, 2]
         p_joint = transform_axis[:3, 3]
