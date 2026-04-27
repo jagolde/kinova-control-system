@@ -4,11 +4,12 @@ import numpy as np
 import pyrealsense2 as rs
 import cv2 as cv
 import tkinter as tk
+import queue
 
 from camera import RealsenseCamera
 from camera import SimCamera
 
-from ux_helpers import make_button
+from ui_helpers import make_button
 from kinematics_helpers import (
     EndEffector,
     calc_forward_kinematics,
@@ -51,13 +52,19 @@ class Main(BaseApp):
             self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
             self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
 
+        self.action_steps = np.array([], dtype=object)
+        self.action_index = 0
+
         self.state = "WAITING"
 
     def loop(self):
         if self.state == "ACTING":
-            pass
-        #   do actions until list is complete
-        #   Set state to waiting
+            if self.action_index < len(self.action_steps):
+                func, args = self.action_steps[self.action_index]
+                func(*args)
+                self.action_index += 1
+            else:
+                self.state = "WAITING"
         elif self.state == "WAITING":
             root = tk.Tk()
 
@@ -87,9 +94,30 @@ class Main(BaseApp):
         #   Set state to acting
     
     def basic_pour_button(self, root):
-        # Add commands
+        self.action_steps = np.array([], dtype=object)
+        self.action_index = 0
+
+        # Move next to cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z, ee.rotx, ee.roty, ee.rotz = [0,0,0,0,0,0]
+        self.action_steps = np.append(self.action_steps, [(self.move, (ee,))])
+
+        # Open gripper
+        self.action_steps = np.append(self.action_steps, [(self.kinova_robot.open_gripper, (True,))])
+
+        # Move onto cup position
+        ee = EndEffector()
+        ee.x, ee.y, ee.z, ee.rotx, ee.roty, ee.rotz = [0,0,0,0,0,0]
+        self.action_steps = np.append(self.action_steps, [(self.move, (ee,))])
+
+        # Close gripper
+        self.action_steps = np.append(self.action_steps, [(self.kinova_robot.close_gripper, (True,))])
+
         self.state = "ACTING"
         root.destroy()
+    
+    def move(self, ee):
+        pass
 
 if __name__ == "__main__":
     final_project = Main(
