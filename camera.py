@@ -7,6 +7,8 @@ import copy
 import matplotlib
 matplotlib.use('TkAgg')
 
+CUP_Z = 0.2
+POS_SCALE = 1.25
 
 class CameraBase:
     def __init__(self, cameraPosition, w, h):
@@ -27,7 +29,7 @@ class CameraBase:
         self.Rs = dict()
         self.world_positions = dict()
 
-    def find_all_markers(self, rgb, marker_size=0.1016):
+    def find_all_markers(self, rgb, marker_size=0.1016, showIDs=False):
         '''
         Finds aruco markers within the rgb image
         '''
@@ -41,7 +43,7 @@ class CameraBase:
         # Detect the markers
         corners, self.ids, _ = detector.detectMarkers(gray)
 
-        if self.ids is not None:
+        if self.ids is not None and showIDs:
             cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
             plt.imshow(rgb)
             plt.show()
@@ -61,9 +63,12 @@ class CameraBase:
                 self.Ts[mid] = T
 
                 p_cam = np.append(tvecs[i][0], 1.0)
-                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
 
-    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0.43, 0.01, 0], marker_size=0.1016):
+                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+                self.world_positions[mid][2] += CUP_Z
+                self.world_positions[mid] = self.world_positions[mid] * [-1, -1, 1]
+
+    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0.43*POS_SCALE, 0, 0], marker_size=0.1016):
         '''
         Detects a specific base marker and calculates camera position based on that
         '''
@@ -74,7 +79,7 @@ class CameraBase:
             aruco_dict, cv.aruco.DetectorParameters())
         corners, ids, _ = detector.detectMarkers(gray)
 
-        print(ids)
+        print(f"IDs Visible: {np.transpose(ids)}")
 
         if ids is None:
             return False
