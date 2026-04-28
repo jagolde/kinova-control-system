@@ -1,14 +1,15 @@
 from backend.kinova import BaseApp
 import numpy as np
 from kinematics_helpers import *
+import time
 
 class Main(BaseApp):
         
     def start(self):
         self.home = False
-        target, _ = calc_forward_kinematics([0.79, 6.11, 1.48, 1.4, 6.11, 1.57])
+        self.target, _ = calc_forward_kinematics([0.79, 6.11, 1.48, 1.4, 6.11, 1.57])
         
-        self.angles = calc_numerical_ik(target,joint_values)
+        # self.angles = calc_numerical_ik(self.target,joint_values)
         # ee = EndEffector()
         # ee.x = 0.25
         # ee.y = 0.25
@@ -16,9 +17,16 @@ class Main(BaseApp):
         # ee.rotx = 0
         # ee.roty = 0
         # ee.rotz = pi/2
-        # self.angles = calc_numerical_ik(ee,joint_values)
+        self.angles = calc_numerical_ik(self.target,joint_values)
         
-    def loop(self):        
+    def loop(self):  
+        # print(self.target.x)
+        # print(self.target.y)
+        # print(self.target.z)     
+        # print(self.target.rotx)
+        # print(self.target.roty)
+        # print(self.target.rotz)
+        # print(self.angles)
         is_7DOF = False
         
         if(is_7DOF is None):
@@ -30,24 +38,27 @@ class Main(BaseApp):
             
         else:
             HOME_POSITION = np.array([1.75, 5.76, 2.18, 2.44, 4.54, 0.0])
-            next_position = self.angles
-            
+            next_position = np.array([0.79, 6.11, 1.48, 1.4, 6.11, 1.57])
+            target_pos = self.angles
         if(self.home):
             self.kinova_robot.set_joint_angles(next_position, gripper_percentage=100)
-            self.home = False
+            time.sleep(1)
+            self.kinova_robot.set_joint_angles(target_pos, gripper_percentage=100)
+            time.sleep(1)
+            # self.home = False
 
         else:
             self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
             self.home = True            
 
 if __name__ == "__main__":
-    simulate = False
+    simulate = True
     
     if(simulate is None):
         raise ValueError("Pick simulate or real world robot")
     
     if simulate:
-        # final_project = Main(simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        final_project = Main(simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
         # final_project = Main(simulate=True, urdf_path="visualizer/7dof/urdf/7dof.urdf")
         pass
     else:
