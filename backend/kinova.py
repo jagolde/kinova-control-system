@@ -503,19 +503,20 @@ class SimKinova:
     def sim_objects(self):
         p = self.p
 
-        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag0.png")
-        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag1.png")
-        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag2.png")
+        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag7.png")
+        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag6.png")
+        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag4.png")
 
         quad = "apriltagtextures/flat_quad.obj"
-        scale = [0.05, 0.05, 1]
+        # scale = [0.1016, 0.1016, 1]
+        scale = [0.0508, 0.0508, 1]
         april_tag_shape_0 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
         april_tag_shape_1 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
         april_tag_shape_2 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
 
-        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.5, 0.0, 0.1])
-        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.5, 0.2, 0.1])
-        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0.5, -0.2, 0.1])
+        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.43, 0, 0.01])
+        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.43, 0.43, 0.01])
+        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0, 0.43, 0.01])
 
         p.changeVisualShape(april_tag_0, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_0)
         p.changeVisualShape(april_tag_1, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_1)
