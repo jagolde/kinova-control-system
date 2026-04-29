@@ -1,19 +1,17 @@
 import math
 import numpy as np
 from numpy import *
-
-l1, l2, l3, l4, l5, l6, l7 = 0.156, 0.128, 0.410, 0.208, 0.105, 0.105, 0.0615
         
 joint_values = [1.75, 5.76, 2.18, 2.44, 4.54, 0.0]
         
 # Joint limits (in radians)
 joint_limits = [
-    [0, 2*pi],
-    [0, 2*pi],
-    [0, 2*pi],
-    [0, 2*pi],
-    [0, 2*pi],
-    [0, 2*pi],
+    [-2.687, 2.687],
+    [-2.618, 2.618],
+    [-2.618, 2.618],
+    [-2.600, 2.600],
+    [-2.530, 2.530],
+    [-2.600, 2.600],
 ]
 
 num_dof = 6
@@ -298,107 +296,45 @@ def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300
     # return null if not converged
     return np.zeros(len(joint_values))
 
-def calc_inverse_kinematics(self, ee, joint_values=None, soln=0):
-        """
-        Calculates the analytical inverse position kinematics for the 6-DOF Kinova manipulator.
-        Utilizes kinematic decoupling via the spherical wrist to compute the closed-form 
-        solution governed by the explicitly requested geometric root.
-        """
-        p_ee = np.array([ee.x, ee.y, ee.z])
-        R_06 = euler_to_rotm([ee.rotx, ee.roty, ee.rotz])
-        d_6 = self.l6 + self.l7
-        
-        # Wrist Position
-        p_wrist = p_ee - d_6 * (R_06 @ np.array([0, 0, 1]))
-        wx, wy, wz = p_wrist[0], p_wrist[1], p_wrist[2]
-
-        solutions = []
-
-        theta1_configs = [
-            (-atan2(wy, wx), np.sqrt(wx**2 + wy**2)),
-            (-atan2(-wy, -wx), -np.sqrt(wx**2 + wy**2))
-        ]
-
-        for theta_1, r in theta1_configs:
-            s = wz - (self.l1 + self.l2) # Height relative to shoulder
+def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
+    q = np.array(q_guess if q_guess is not None else [0.0]*6, dtype=float)
+    lambda_sq = 0.01  # Damping factor for singularity robustness
+    
+    # Target pose extraction
+    p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
+    R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
+    for _ in range(100):
+        for _ in range(ilimit):
+            H_c, _ = compute_transforms(q)
+            H_ee = H_c[-1]
             
-            # Law of Cosines for Elbow (beta) and Shoulder (alpha)
-            l_proximal = self.l3
-            l_distal = self.l4 + self.l5
-            L_sq = r**2 + s**2
+            # Position Error
+            dp = p_targ - H_ee[:3, 3]
             
-            # Check reachability
-            numerator = l_proximal**2 + l_distal**2 - L_sq
-            denominator = 2 * l_proximal * l_distal
-            if abs(numerator) > abs(denominator):
-                continue
+            # Orientation Error (Skew symmetric matrix)
+            R_curr = H_ee[:3, :3]
+            R_err = R_targ @ R_curr.T
+            do = 0.5 * np.array([
+                R_err[2, 1] - R_err[1, 2],
+                R_err[0, 2] - R_err[2, 0],
+                R_err[1, 0] - R_err[0, 1]
+            ])
 
-            cos_beta = numerator / denominator
-            beta = np.arccos(cos_beta)
+            # Combine position and orientation erros
+            error = np.hstack([dp, do])
+            if np.linalg.norm(error) < tol:
+                return [wraptopi(val) for val in q]
 
-            # 2. Elbow Config (Up vs Down)
-            for theta_3 in [np.pi - beta, -(np.pi - beta)]:
-                
-                # alpha: Interior angular offset 
-                alpha = np.arctan2(l_distal * np.sin(theta_3), l_proximal + l_distal * np.cos(theta_3))
+            # Damped Least Squares Update
+            J = jacobian(q)
+            JJT = J @ J.T + lambda_sq * np.eye(6)
+            dq = J.T @ np.linalg.solve(JJT, error)
+            q += dq
+            limits = np.array(joint_limits)
+            q = np.clip(q, limits[:, 0], limits[:, 1])
+        q = np.array(sample_valid_joints(), dtype=float)
 
-                # gamma: Absolute angular trajectory
-                gamma = np.arctan2(s, r)
-
-                # theta_2
-                theta_2 = (np.pi / 2) - (gamma - alpha)
-                
-                # Calculate Rotation of Frame 3 (R_03)
-                q_temp = [theta_1, theta_2, theta_3, 0, 0, 0]
-                H_cumulative, _ = self._compute_transforms(q_temp)
-                R_03 = H_cumulative[4][:3, :3]
-                
-                R_36 = R_03.T @ R_06
-                
-                # Wrist Config (Positive vs Negative sine for theta_5)
-                c5 = -R_36[2, 2]
-                s5_mag = np.sqrt(np.clip(1 - c5**2, 0, 1))
-                
-                for s5 in [s5_mag, -s5_mag]:
-                    theta_5 = atan2(s5, c5)
-                    
-                    if abs(s5) > 1e-6:
-                        theta_4 = atan2(-R_36[1, 2], -R_36[0, 2])
-                        theta_6 = atan2(-R_36[2, 1], -R_36[2, 0])
-                    else:
-                        # Gimbal lock
-                        theta_4 = 0
-                        theta_6 = atan2(R_36[1, 0], R_36[0, 0])
-
-                    candidate_q = [theta_1, theta_2, theta_3, theta_4, theta_5, theta_6]
-                    candidate_q = [self.normalize_angle(q) for q in candidate_q]
-
-                    # Check limits
-                    if check_joint_limits(candidate_q, self.joint_limits):
-                        solutions.append(candidate_q)
-
-        # Sort solutions by error
-        def get_error(q):
-            fk_ee, _ = self.calc_forward_kinematics(q)
-            return np.linalg.norm(np.array([ee.x, ee.y, ee.z]) - np.array([fk_ee.x, fk_ee.y, fk_ee.z]))
-        
-        solutions.sort(key=get_error)
-
-        if not solutions:
-            return [0, 0, 0, 0, 0, 0]
-
-        # If a specific solution index is requested, return it
-        if soln < len(solutions):
-            return solutions[soln]
-        
-        # Return best solution
-        return solutions[0]
-
-def normalize_angle(angle):
-    """
-    Normalize an angle to the range (-pi, pi].
-    """
-    return (angle + np.pi) % (2 * np.pi) - np.pi
+    return q
 
 def jacobian(joint_values: list):
     """
@@ -410,7 +346,6 @@ def jacobian(joint_values: list):
     Returns:
         np.ndarray: The Jacobian matrix (6x6).
     """
-    
     curr_joint_values = joint_values.copy()
 
     # Ensure that the joint angles respect the joint limits
@@ -445,3 +380,15 @@ def inverse_jacobian(joint_values: list):
         np.ndarray: The inverse Jacobian matrix.
     """
     return np.linalg.pinv(jacobian(joint_values))
+
+def wraptopi(angle_rad):
+    """
+    Wrap an angle to the range [-pi, pi).
+
+    Args:
+        angle_rad: Angle in radians.
+
+    Returns:
+        Equivalent angle in radians in the interval [-pi, pi).
+    """
+    return (angle_rad + math.pi) % (2 * math.pi) - math.pi
