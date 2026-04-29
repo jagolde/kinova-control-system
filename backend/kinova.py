@@ -4,6 +4,8 @@ import queue
 import threading
 import numpy as np
 
+POS_SCALE = 1.25
+
 # Real Robot Imports
 try:
     import backend.utilities as utilities
@@ -314,7 +316,7 @@ class SimKinova:
             pos = end_effector[0] # World position
             euler = self.p.getEulerFromQuaternion(end_effector[1]) # World orientation (quaternion)
             self.pose = np.concatenate((pos,euler),axis=0)
-            print(self.pose)
+            # print(self.pose)
 
             # Process Actions
             if not self._is_action_running and not self.action_queue.empty():
@@ -509,24 +511,47 @@ class SimKinova:
     def sim_objects(self):
         p = self.p
 
-        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag0.png")
-        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag1.png")
-        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag2.png")
+        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag7.png")
+        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag6.png")
+        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag4.png")
 
         quad = "apriltagtextures/flat_quad.obj"
-        scale = [0.05, 0.05, 1]
+        scale = [0.0508, 0.0508, 1]
         april_tag_shape_0 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
         april_tag_shape_1 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
         april_tag_shape_2 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
 
-        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.5, 0.0, 0.1])
-        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.5, 0.2, 0.1])
-        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0.5, -0.2, 0.1])
+        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.43*POS_SCALE, 0, 0.01])
+        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.43*POS_SCALE, 0.43*POS_SCALE, 0.01])
+        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0, 0.43*POS_SCALE, 0.01])
 
         p.changeVisualShape(april_tag_0, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_0)
         p.changeVisualShape(april_tag_1, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_1)
         p.changeVisualShape(april_tag_2, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_2)
 
+    def create_ball(self, pos=[0,0,0], end=False):
+        radius = 0.05
+        mass = 0
+
+        if end:
+            color = [0,1,0,0.5]
+        else:
+            color = [1,0,0,0.5]
+
+        # Create collision and visual shapes
+        colSphereId = self.p.createCollisionShape(self.p.GEOM_SPHERE, radius=radius)
+        visualShapeId = self.p.createVisualShape(self.p.GEOM_SPHERE, radius=radius, rgbaColor=color) # Red
+
+        # Create the body
+        ballId = self.p.createMultiBody(baseMass=mass,
+                                baseCollisionShapeIndex=-1,
+                                baseVisualShapeIndex=visualShapeId,
+                                basePosition=pos)
+        
+        return ballId
+
+    def destroy(self, id):
+        self.p.removeBody(id)
 
 class Kinova:
     """Wrapper class choosing between Physical and Simulation"""

@@ -285,14 +285,15 @@ def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300
             J_pinv = np.linalg.pinv(J_pos)  # 6x6
 
             new_joint_values = new_joint_values + 0.1*(J_pinv @ error)
-            print(f'Error: {error}')
-            print(f"Joint Values: {new_joint_values}")
+            # print(f'Error: {error}')
+            # print(f"Joint Values: {new_joint_values}")
             # enforce joint limits
             for i, (low, high) in enumerate(joint_limits):
                 new_joint_values[i] = np.clip(new_joint_values[i], low, high)
         # if not converged, return a random configuration and try again
         new_joint_values = np.array(sample_valid_joints(), dtype=float)
     
+    print("Fail")
     # return null if not converged
     return np.zeros(len(joint_values))
 

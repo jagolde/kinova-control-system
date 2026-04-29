@@ -1,12 +1,14 @@
+import cv2 as cv
+from scipy import linalg
+import matplotlib.pyplot as plt
 import pyrealsense2 as rs
 import numpy as np
 import copy
 import matplotlib
 matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
 
-from scipy import linalg
-import cv2 as cv
+CUP_Z = 0.2
+POS_SCALE = 1.25
 
 class CameraBase:
     def __init__(self, cameraPosition, w, h):
@@ -27,7 +29,7 @@ class CameraBase:
         self.Rs = dict()
         self.world_positions = dict()
 
-    def find_all_markers(self, rgb):
+    def find_all_markers(self, rgb, marker_size=0.1016, showIDs=False):
         '''
         Finds aruco markers within the rgb image
         '''
@@ -41,14 +43,14 @@ class CameraBase:
         # Detect the markers
         corners, self.ids, _ = detector.detectMarkers(gray)
 
-        if self.ids is not None:
+        if self.ids is not None and showIDs:
             cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
             plt.imshow(rgb)
             plt.show()
 
         if self.ids is not None:
             rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-                corners, 0.05, self.K, self.distortion
+                corners, marker_size, self.K, self.distortion
             )
 
             for i, marker_id in enumerate(self.ids):
@@ -61,16 +63,23 @@ class CameraBase:
                 self.Ts[mid] = T
 
                 p_cam = np.append(tvecs[i][0], 1.0)
-                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
 
-    def calibrate_from_marker(self, rgb, marker_id=3, marker_position=[0,0,0.5], marker_size=0.05):
+                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+                self.world_positions[mid][2] += CUP_Z
+                self.world_positions[mid] = self.world_positions[mid] * [-1, -1, 1]
+
+    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0.43*POS_SCALE, 0, 0], marker_size=0.1016):
         '''
         Detects a specific base marker and calculates camera position based on that
         '''
         gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
-        aruco_dict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_36H11)
-        detector = cv.aruco.ArucoDetector(aruco_dict, cv.aruco.DetectorParameters())
+        aruco_dict = cv.aruco.getPredefinedDictionary(
+            cv.aruco.DICT_APRILTAG_36H11)
+        detector = cv.aruco.ArucoDetector(
+            aruco_dict, cv.aruco.DetectorParameters())
         corners, ids, _ = detector.detectMarkers(gray)
+
+        print(f"IDs Visible: {np.transpose(ids)}")
 
         if ids is None:
             return False
@@ -85,10 +94,17 @@ class CameraBase:
         )
 
         R, _ = cv.Rodrigues(rvecs[0])
-        T_marker_cam = np.vstack((np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
+        T_marker_cam = np.vstack(
+            (np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
 
-        self.cam_to_world = marker_position @ np.linalg.inv(T_marker_cam)
-        self.position = self.cam_to_world[:3, 3]
+        # Convert marker_position to 4x4 transformation matrix if needed
+        marker_pos_array = np.array(marker_position, dtype=float)
+        T_world_marker = np.eye(4)
+        T_world_marker[:3, 3] = marker_pos_array
+
+        self.cam_to_world = T_world_marker @ np.linalg.inv(T_marker_cam)
+
+        self.position = self.cam_to_world[:3, 3] * [-1, -1, 1]
         return True
 
     def undistort(self, img):
@@ -130,7 +146,8 @@ class RealsenseCamera(CameraBase):
         self.align = rs.align(rs.stream.color)
 
         # Read factory intrinsics directly from the camera
-        intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+        intr = profile.get_stream(
+            rs.stream.color).as_video_stream_profile().get_intrinsics()
         self.K = np.array([[intr.fx, 0, intr.ppx],
                            [0, intr.fy, intr.ppy],
                            [0, 0, 1]], dtype=np.float64)
@@ -170,11 +187,12 @@ class RealsenseCamera(CameraBase):
         '''
         Calibrates the camera to adjust for distortion
         '''
-        
+
         images = []
 
-        for i in range(3):
-            images.append(cv.imread(f"calibration_photos/img{i}", cv.IMREAD_COLOR))
+        for i in range(4):
+            images.append(
+                cv.imread(f"calibration_photos/img{i}.png", cv.IMREAD_COLOR))
 
         gridshape = (9, 6)
         squaresize = 24e-3
@@ -222,11 +240,12 @@ class RealsenseCamera(CameraBase):
 
 
 class SimCamera(CameraBase):
-    def __init__(self, kinova=None, fov=60, w=640, h=480, nearLimit=0.01, farLimit=5, cameraPosition=[0.5, 0, 0.5], targetPosition=[0, 0, 0]):
+    def __init__(self, kinova=None, fov_h=69.4, fov_v=42.5, w=640, h=480, nearLimit=0.01, farLimit=5, cameraPosition=[0.5, 0, 0.5], targetPosition=[0, 0, 0]):
         super().__init__(cameraPosition, w, h)
 
         self.targetPosition = targetPosition
-        self.fov = fov
+        self.fov_h = fov_h  # Horizontal FOV in degrees
+        self.fov_v = fov_v  # Vertical FOV in degrees
         self.nearLimit = nearLimit
         self.farLimit = farLimit
 
@@ -234,13 +253,25 @@ class SimCamera(CameraBase):
         self.p = self.kinova.base_kinova.p
 
     def start(self):
-        self.view = self.p.computeViewMatrix(
-            self.position, self.targetPosition, [0, 0, 1])
-        self.proj = self.p.computeProjectionMatrixFOV(
-            self.fov, self.w/self.h, self.nearLimit, self.farLimit)
+        # Rotate camera position 180 degrees around target around Z-axis
+        pos_rel = np.array(self.position) - np.array(self.targetPosition)
+        # 180-degree rotation around Z-axis: (x, y, z) -> (-x, -y, z)
+        pos_rel_rotated = np.array([-pos_rel[0], -pos_rel[1], pos_rel[2]])
+        rotated_position = np.array(self.targetPosition) + pos_rel_rotated
 
-        fy = (self.h / 2) / np.tan(np.radians(self.fov / 2))
-        fx = (self.w / 2) / (self.aspect * np.tan(np.radians(self.fov / 2)))
+        self.view = self.p.computeViewMatrix(
+            rotated_position, self.targetPosition, [0, 0, 1])
+
+        # Build frustum from both FOVs so the projection and K are consistent
+        near = self.nearLimit
+        right = near * np.tan(np.radians(self.fov_h / 2))
+        top = near * np.tan(np.radians(self.fov_v / 2))
+        self.proj = self.p.computeProjectionMatrix(
+            -right, right, -top, top, near, self.farLimit)
+
+        # K is derived from the same FOVs as the projection matrix
+        fx = (self.w / 2) / np.tan(np.radians(self.fov_h / 2))
+        fy = (self.h / 2) / np.tan(np.radians(self.fov_v / 2))
 
         self.K = np.array([[fx, 0, self.w / 2], [0, fy, self.h / 2],
                           [0, 0, 1]], dtype=np.float64)
@@ -263,8 +294,6 @@ class SimCamera(CameraBase):
             640, 480, self.view, self.proj)
         rgb = np.array(rgba, dtype=np.uint8).reshape(480, 640, 4)[:, :, 2::-1]
         return rgb, depth
-    
-
 
 
 # remove distortion if needed
