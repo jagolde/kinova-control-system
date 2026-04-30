@@ -311,72 +311,22 @@ def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300
     # return null if not converged
     return np.zeros(len(joint_values))
 
-# def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
-#     q = np.array(q_guess if q_guess is not None else [0.0]*6, dtype=float)
-#     lambda_sq = 0.01  # Damping factor for singularity robustness
+def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
+    q = np.array(q_guess if q_guess is not None else [0.0]*6, dtype=float)
+    lambda_sq = 0.01  # Damping factor for singularity robustness
     
-#     # Target pose extraction
-#     p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
-#     R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
-#     for _ in range(100):
-#         for _ in range(ilimit):
-#             H_c, _ = compute_transforms(q)
-#             H_ee = H_c[-1]
-            
-#             # Position Error
-#             dp = p_targ - H_ee[:3, 3]
-            
-#             # Orientation Error (Skew symmetric matrix)
-#             R_curr = H_ee[:3, :3]
-#             R_err = R_targ @ R_curr.T
-#             do = 0.5 * np.array([
-#                 R_err[2, 1] - R_err[1, 2],
-#                 R_err[0, 2] - R_err[2, 0],
-#                 R_err[1, 0] - R_err[0, 1]
-#             ])
-
-#             # Combine position and orientation erros
-#             error = np.hstack([dp, do])
-#             if np.linalg.norm(error) < tol:
-#                 return [wraptopi(val) for val in q]
-
-#             # Damped Least Squares Update
-#             J = jacobian(q)
-#             JJT = J @ J.T + lambda_sq * np.eye(6)
-#             dq = J.T @ np.linalg.solve(JJT, error)
-#             q += dq
-#             limits = np.array(joint_limits)
-#             q = np.clip(q, limits[:, 0], limits[:, 1])
-#         q = np.array(sample_valid_joints(), dtype=float)
-#     print("didn't converge u suck :(")
-#     return q
-
-def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150, n_tries=5):
-    lambda_sq = 0.01
-    best_q = None
-    best_q1 = float("inf")
-
-    # Target pose
+    # Target pose extraction
     p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
     R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
-
-    for attempt in range(n_tries):
-        # Initialize guess
-        if attempt == 0 and q_guess is not None:
-            q = np.array(q_guess, dtype=float)
-        else:
-            q = np.array(sample_valid_joints(), dtype=float)
-
-        converged = False
-
+    for _ in range(100):
         for _ in range(ilimit):
             H_c, _ = compute_transforms(q)
             H_ee = H_c[-1]
-
-            # Position error
+            
+            # Position Error
             dp = p_targ - H_ee[:3, 3]
-
-            # Orientation error
+            
+            # Orientation Error (Skew symmetric matrix)
             R_curr = H_ee[:3, :3]
             R_err = R_targ @ R_curr.T
             do = 0.5 * np.array([
@@ -385,34 +335,84 @@ def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150, n_tri
                 R_err[1, 0] - R_err[0, 1]
             ])
 
+            # Combine position and orientation erros
             error = np.hstack([dp, do])
-
             if np.linalg.norm(error) < tol:
-                converged = True
-                break
+                return [wraptopi(val) for val in q]
 
-            # DLS step
+            # Damped Least Squares Update
             J = jacobian(q)
             JJT = J @ J.T + lambda_sq * np.eye(6)
             dq = J.T @ np.linalg.solve(JJT, error)
             q += dq
-
             limits = np.array(joint_limits)
             q = np.clip(q, limits[:, 0], limits[:, 1])
-
-        if converged:
-            q_wrapped = np.array([wraptopi(val) for val in q])
-
-            # Pick solution with smallest q[1]
-            if abs(q_wrapped[1]) < abs(best_q1):
-                best_q1 = q_wrapped[1]
-                best_q = q_wrapped
-
-    if best_q is not None:
-        return best_q.tolist()
-
+        q = np.array(sample_valid_joints(), dtype=float)
     print("didn't converge u suck :(")
-    return q.tolist()
+    return q
+
+# def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150, n_tries=5):
+#     lambda_sq = 0.01
+#     best_q = None
+#     best_q1 = float("inf")
+
+#     # Target pose
+#     p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
+#     R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
+
+#     for attempt in range(n_tries):
+#         # Initialize guess
+#         if attempt == 0 and q_guess is not None:
+#             q = np.array(q_guess, dtype=float)
+#         else:
+#             q = np.array(sample_valid_joints(), dtype=float)
+
+#         converged = False
+
+#         for _ in range(ilimit):
+#             H_c, _ = compute_transforms(q)
+#             H_ee = H_c[-1]
+
+#             # Position error
+#             dp = p_targ - H_ee[:3, 3]
+
+#             # Orientation error
+#             R_curr = H_ee[:3, :3]
+#             R_err = R_targ @ R_curr.T
+#             do = 0.5 * np.array([
+#                 R_err[2, 1] - R_err[1, 2],
+#                 R_err[0, 2] - R_err[2, 0],
+#                 R_err[1, 0] - R_err[0, 1]
+#             ])
+
+#             error = np.hstack([dp, do])
+
+#             if np.linalg.norm(error) < tol:
+#                 converged = True
+#                 break
+
+#             # DLS step
+#             J = jacobian(q)
+#             JJT = J @ J.T + lambda_sq * np.eye(6)
+#             dq = J.T @ np.linalg.solve(JJT, error)
+#             q += dq
+
+#             limits = np.array(joint_limits)
+#             q = np.clip(q, limits[:, 0], limits[:, 1])
+
+#         if converged:
+#             q_wrapped = np.array([wraptopi(val) for val in q])
+
+#             # Pick solution with smallest q[1]
+#             if abs(q_wrapped[1]) < abs(best_q1):
+#                 best_q1 = q_wrapped[1]
+#                 best_q = q_wrapped
+
+#     if best_q is not None:
+#         return best_q.tolist()
+
+#     print("didn't converge u suck :(")
+#     return q.tolist()
 
 def jacobian(joint_values: list):
     """

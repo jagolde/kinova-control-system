@@ -69,7 +69,7 @@ class CameraBase:
 
                 self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
                 self.world_positions[mid][2] += CUP_Z
-                self.world_positions[mid] = self.world_positions[mid] * [-1, -1, 1]
+                self.world_positions[mid] = self.world_positions[mid]
                 R_corr, t_corr = self.xy_correction
                 self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
 

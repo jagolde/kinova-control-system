@@ -20,8 +20,8 @@ from trajectory_classes import MultiSegmentTrajectoryGenerator, QuinticPolynomia
 
 POS_SCALE = 1
 
-POUR_CUP_ID = 6
-FILL_CUP_ID = 4
+POUR_CUP_ID = 0
+FILL_CUP_ID = 1
 
 FILL_CUP_OFFSET = np.array([-0.25, 0, 0])
 POUR_CUP_OFFSET = np.array([-0.25, 0, 0])
@@ -37,6 +37,8 @@ class Main(BaseApp):
 
         self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
         self.sim_cam = not RealsenseCamera.is_connected()
+
+        self.currrent_angles = np.array(self.kinova_robot.get_joint_angles())
 
         if self.sim_cam:
             print("Sim Camera Connected")
@@ -55,13 +57,13 @@ class Main(BaseApp):
 
         # Calibrate camera using all 3 markers (more robust than single-marker)
         if self.sim_cam:
-            self.cam.calibrate_from_marker(rgb, marker_positions={
+            self.cam.calibrate_from_marker(marker_positions={
                 7: [-0.43*POS_SCALE, 0,              0],
                 6: [-0.43*POS_SCALE, -0.43*POS_SCALE, 0],
                 4: [0,              -0.43*POS_SCALE, 0],
             })
         else:
-            self.cam.calibrate_from_marker(rgb, marker_positions={
+            self.cam.calibrate_from_marker(marker_positions={
                 7: [0,              -0.43*POS_SCALE, 0],
                 6: [0.43*POS_SCALE, -0.43*POS_SCALE, 0],
                 4: [0.43*POS_SCALE, 0,              0],
@@ -76,6 +78,8 @@ class Main(BaseApp):
         if len(self.cam.world_positions) > 0:
             self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
             self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
+            self.pour_cup[2] = 0.03
+            self.fill_cup[2] = 0.03
 
         print(f"pour cup pos: {self.pour_cup}")
         print(f"fill cup pos: {self.fill_cup}")
@@ -113,25 +117,65 @@ class Main(BaseApp):
         self.action_steps = []
         self.action_index = 0
 
-        # 1. Move next to cup
+
+        # 1. Move above can
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 1. down to cup
         ee = EndEffector()
         ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]
-        ee.rotx, ee.roty, ee.rotz = -pi/2, 0, 0
-
-        self.action_steps.append((self.move, (ee,)))
-
-        # 2. Open gripper
-        self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
-
-        # 3. Move onto fill cup position
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup[0], self.fill_cup[1], self.fill_cup[2]
-        ee.rotx, ee.roty, ee.rotz = -pi/2, 0, 0
-
-        self.action_steps.append((self.move, (ee,)))
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
 
         # 4. Close gripper
         self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
+
+        # 1. lift cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 3. Move above fill cup position
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup[0], self.fill_cup[1]+0.05, self.fill_cup[2]+0.17
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # turn cup over
+        bs = [0,0,0,0,0,2,100]
+        self.action_steps.append((self.move_joint, (bs,)))
+
+        # 3. unrotate
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup[0], self.fill_cup[1], self.fill_cup[2]+0.17
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 1. move back
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 1. move down
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.01
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 4. open gripper
+        self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
 
         # find desired location from aruco marker
         # make two steps before desired location: move backward and move up
@@ -139,7 +183,7 @@ class Main(BaseApp):
         self.state = "ACTING"
         root.destroy()
 
-    def move(self, ee, T=5.0, nsteps=10, mode="task"):
+    def move_ee(self, ee, T=5.0, nsteps=2, mode="task"):
         """Move to end effector position using a task-space quintic trajectory."""
         # Build waypoints: [x, y, z, rotx, roty, rotz]\
         curr_angles = self.kinova_robot.get_joint_angles()
@@ -177,14 +221,24 @@ class Main(BaseApp):
             for k in range(traj.X.shape[2]):
                 step_ee = EndEffector()
                 step_ee.x,    step_ee.y,    step_ee.z    = traj.X[0, 0, k], traj.X[1, 0, k], traj.X[2, 0, k]
-                step_ee.rotx, step_ee.roty, step_ee.rotz = 0, -pi/2, 0
+                step_ee.rotx, step_ee.roty, step_ee.rotz = traj.X[3, 0, k], traj.X[4, 0, k], traj.X[5, 0, k]
                 q = calc_inverse_kinematics(step_ee, q)
-                self.kinova_robot.set_joint_angles(q, gripper_percentage=0)
+                self.kinova_robot.set_joint_angles(q)
+                self.currrent_angles = q
                 if self.sim: self.kinova_robot.base_kinova.destroy(ball_ids[k])
+            # q = calc_inverse_kinematics(ee, q)
+            # self.kinova_robot.set_joint_angles(q, gripper_percentage=0)
         elif mode == "joint":
             for k in range(traj.X.shape[2]):
-                self.kinova_robot.set_joint_angles(traj.X[:, 0, k], gripper_percentage=0)
+                self.kinova_robot.set_joint_angles(traj.X[:, 0, k])
+                self.currrent_angles = q
                 if self.sim: self.kinova_robot.base_kinova.destroy(ball_ids[k])
+
+    def move_joint(self, joint_angles):
+        new_angles = self.currrent_angles+np.array(joint_angles[0:6])
+        print(f"current: {self.currrent_angles} new: {new_angles}")
+        self.kinova_robot.set_joint_angles(new_angles, gripper_percentage=joint_angles[6])
+        self.currrent_angles = joint_angles[0:6]
 
 
 if __name__ == "__main__":
