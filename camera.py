@@ -7,7 +7,7 @@ import copy
 import matplotlib
 matplotlib.use('TkAgg')
 
-CUP_Z = 0.2
+CUP_Z = 0.1
 POS_SCALE = 1
 
 class CameraBase:
@@ -68,43 +68,67 @@ class CameraBase:
                 self.world_positions[mid][2] += CUP_Z
                 self.world_positions[mid] = self.world_positions[mid] * [-1, -1, 1]
 
-    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0, 0.43*POS_SCALE, 0], marker_size=0.1016, sim=True):
+    def calibrate_from_marker(self, rgb, marker_positions: dict, marker_size=0.1016):
         '''
-        Detects a specific base marker and calculates camera position based on that
+        marker_positions: {marker_id: [x, y, z]} for each known marker in world frame.
+        Detects all known markers and averages their cam_to_world estimates for robustness.
+        Returns True if at least one known marker was found.
         '''
         gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
-        aruco_dict = cv.aruco.getPredefinedDictionary(
-            cv.aruco.DICT_APRILTAG_36H11)
-        detector = cv.aruco.ArucoDetector(
-            aruco_dict, cv.aruco.DetectorParameters())
+        aruco_dict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_36H11)
+        detector = cv.aruco.ArucoDetector(aruco_dict, cv.aruco.DetectorParameters())
         corners, ids, _ = detector.detectMarkers(gray)
 
-        print(f"IDs Visible: {np.transpose(ids)}")
+        print(f"IDs Visible: {np.transpose(ids) if ids is not None else None}")
 
         if ids is None:
             return False
 
         ids_flat = ids.flatten()
-        if marker_id not in ids_flat:
+        R_sum = np.zeros((3, 3))
+        t_sum = np.zeros(3)
+        count = 0
+
+        for i, marker_id in enumerate(ids_flat):
+            mid = int(marker_id)
+            if mid not in marker_positions:
+                continue
+
+            rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
+                [corners[i]], marker_size, self.K, self.distortion
+            )
+
+            R, _ = cv.Rodrigues(rvecs[0])
+            T_marker_cam = np.vstack(
+                (np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
+
+            T_world_marker = np.eye(4)
+            T_world_marker[:3, 3] = np.array(marker_positions[mid], dtype=float)
+
+            c2w = T_world_marker @ np.linalg.inv(T_marker_cam)
+            R_sum += c2w[:3, :3]
+            t_sum += c2w[:3, 3]
+            count += 1
+
+        if count == 0:
             return False
 
-        idx = np.where(ids_flat == marker_id)[0][0]
-        rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-            [corners[idx]], marker_size, self.K, self.distortion
-        )
+        # Average translation
+        t_avg = t_sum / count
 
-        R, _ = cv.Rodrigues(rvecs[0])
-        T_marker_cam = np.vstack(
-            (np.hstack((R, tvecs[0].reshape(3, 1))), [0, 0, 0, 1]))
+        # Average rotation via SVD — guarantees a valid rotation matrix
+        U, _, Vt = np.linalg.svd(R_sum)
+        R_avg = U @ Vt
+        if np.linalg.det(R_avg) < 0:
+            U[:, -1] *= -1
+            R_avg = U @ Vt
 
-        # Convert marker_position to 4x4 transformation matrix if needed
-        marker_pos_array = np.array(marker_position, dtype=float)
-        T_world_marker = np.eye(4)
-        T_world_marker[:3, 3] = marker_pos_array
-
-        self.cam_to_world = T_world_marker @ np.linalg.inv(T_marker_cam)
+        self.cam_to_world = np.eye(4)
+        self.cam_to_world[:3, :3] = R_avg
+        self.cam_to_world[:3, 3] = t_avg
 
         self.position = self.cam_to_world[:3, 3] * [-1, -1, 1]
+        print(f"Calibrated from {count} marker(s)")
         return True
 
     def undistort(self, img):
