@@ -79,8 +79,8 @@ class Main(BaseApp):
         if len(self.cam.world_positions) > 0:
             self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
             self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
-            self.pour_cup[2] = POUR_CUP_OFFSET
-            self.fill_cup[2] = FILL_CUP_OFFSET
+            self.pour_cup = POUR_CUP_OFFSET
+            self.fill_cup = FILL_CUP_OFFSET
 
         print(f"pour cup pos: {self.pour_cup}")
         print(f"fill cup pos: {self.fill_cup}")
