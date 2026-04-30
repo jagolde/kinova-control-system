@@ -210,38 +210,52 @@ def compute_transforms(joint_values):
         
     return H_cumulative, Hlist
 
-def calc_forward_kinematics(joint_values: list, radians=True):
-    """
-    Calculate Forward Kinematics (FK) based on the given joint angles.
+# def calc_forward_kinematics(joint_values: list, radians=True):
+#     """
+#     Calculate Forward Kinematics (FK) based on the given joint angles.
 
-    Args:
-        joint_values (list): Joint angles (in radians if radians=True, otherwise in degrees).
-        radians (bool): Whether the input angles are in radians (default is False).
-    """
-    curr_joint_values = joint_values.copy()
+#     Args:
+#         joint_values (list): Joint angles (in radians if radians=True, otherwise in degrees).
+#         radians (bool): Whether the input angles are in radians (default is False).
+#     """
+#     curr_joint_values = joint_values.copy()
 
-    if not radians: # Convert degrees to radians if the input is in degrees
-        curr_joint_values = [np.deg2rad(theta) for theta in curr_joint_values]
+#     if not radians: # Convert degrees to radians if the input is in degrees
+#         curr_joint_values = [np.deg2rad(theta) for theta in curr_joint_values]
 
-    # Ensure that the joint angles respect the joint limits
-    for i, theta in enumerate(curr_joint_values):
-        curr_joint_values[i] = np.clip(theta, joint_limits[i][0], joint_limits[i][1])
+#     # Ensure that the joint angles respect the joint limits
+#     for i, theta in enumerate(curr_joint_values):
+#         curr_joint_values[i] = np.clip(theta, joint_limits[i][0], joint_limits[i][1])
     
-    H_cumulative, Hlist = compute_transforms(curr_joint_values)
+#     H_cumulative, Hlist = compute_transforms(curr_joint_values)
 
-    # Calculate EE position and rotation
-    H_ee = H_cumulative[-1]  # Final transformation matrix for EE
+#     # Calculate EE position and rotation
+#     H_ee = H_cumulative[-1]  # Final transformation matrix for EE
 
-    # Set the end effector (EE) position
+#     # Set the end effector (EE) position
+#     ee = EndEffector()
+#     ee.x, ee.y, ee.z = (H_ee @ np.array([0, 0, 0, 1]))[:3]
+    
+#     # Extract and assign the RPY (roll, pitch, yaw) from the rotation matrix
+#     rpy = rotm_to_euler(H_ee[:3, :3])
+#     ee.rotx, ee.roty, ee.rotz = rpy[0], rpy[1], rpy[2]
+
+#     return ee, Hlist
+
+def calc_forward_kinematics(joint_values: list, radians: bool = True):
+    q = np.array(joint_values, copy=True, dtype=float)
+    if not radians:
+        q = np.deg2rad(q)
+
+    H_cumulative, Hlist = compute_transforms(q)
+    H_ee = H_cumulative[-1]
+
     ee = EndEffector()
-    ee.x, ee.y, ee.z = (H_ee @ np.array([0, 0, 0, 1]))[:3]
-    
-    # Extract and assign the RPY (roll, pitch, yaw) from the rotation matrix
+    ee.x, ee.y, ee.z = H_ee[0, 3], H_ee[1, 3], H_ee[2, 3]
     rpy = rotm_to_euler(H_ee[:3, :3])
-    ee.rotx, ee.roty, ee.rotz = rpy[0], rpy[1], rpy[2]
-
+    ee.rotx, ee.roty, ee.rotz = rpy
     return ee, Hlist
-
+    
 def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300):
     """
     Numerical IK with angles wrapped to [-pi, pi] and joint limit enforcement.
@@ -334,7 +348,7 @@ def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
             limits = np.array(joint_limits)
             q = np.clip(q, limits[:, 0], limits[:, 1])
         q = np.array(sample_valid_joints(), dtype=float)
-
+    print("didn't converge u suck :(")
     return q
 
 def jacobian(joint_values: list):
