@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 CUP_Z = 0.2
-POS_SCALE = 1.25
+POS_SCALE = 1
 
 class CameraBase:
     def __init__(self, cameraPosition, w, h):
@@ -68,7 +68,7 @@ class CameraBase:
                 self.world_positions[mid][2] += CUP_Z
                 self.world_positions[mid] = self.world_positions[mid] * [-1, -1, 1]
 
-    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0.43*POS_SCALE, 0, 0], marker_size=0.1016):
+    def calibrate_from_marker(self, rgb, marker_id=7, marker_position=[0, 0.43*POS_SCALE, 0], marker_size=0.1016, sim=True):
         '''
         Detects a specific base marker and calculates camera position based on that
         '''

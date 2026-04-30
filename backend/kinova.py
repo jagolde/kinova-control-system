@@ -4,7 +4,7 @@ import queue
 import threading
 import numpy as np
 
-POS_SCALE = 1.25
+POS_SCALE = 1
 
 # Real Robot Imports
 try:
