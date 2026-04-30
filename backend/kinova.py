@@ -521,9 +521,9 @@ class SimKinova:
         april_tag_shape_1 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
         april_tag_shape_2 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
 
-        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.43*POS_SCALE, 0, 0.01])
-        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.43*POS_SCALE, 0.43*POS_SCALE, 0.01])
-        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0, 0.43*POS_SCALE, 0.01])
+        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.42*POS_SCALE, 0, 0.01])
+        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.42*POS_SCALE, 0.42*POS_SCALE, 0.01])
+        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0, 0.42*POS_SCALE, 0.01])
 
         p.changeVisualShape(april_tag_0, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_0)
         p.changeVisualShape(april_tag_1, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_1)
