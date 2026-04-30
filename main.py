@@ -73,7 +73,8 @@ class Main(BaseApp):
         print(f"Position: {self.cam.position}")
 
         # Finds all markers world positions
-        self.cam.find_all_markers(undistorted, showIDs=True)
+        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.1016, ids=[4,6,7])
+        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.508, ids=[0,1,2,3,5])
 
         if len(self.cam.world_positions) > 0:
             self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
