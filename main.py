@@ -36,36 +36,37 @@ class Main(BaseApp):
     def start(self):
 
         self.kinova_robot.set_joint_angles(HOME_POSITION, gripper_percentage=0)
-        self.sim_cam = RealsenseCamera.is_connected()
+        self.sim_cam = not RealsenseCamera.is_connected()
 
         if self.sim_cam:
-            print("Realsense Camera Connected")
-            self.cam = RealsenseCamera(cameraPosition=[0.2, 0.2, 1.4])
-            self.cam.calibration()
-        else:
             print("Sim Camera Connected")
             self.cam = SimCamera(kinova=self.kinova_robot,
                                  cameraPosition=[0.2, 0.2, 1.4],
                                  targetPosition=[0.2, 0.199, 0])
+        else:
+            print("Realsense Camera Connected")
+            self.cam = RealsenseCamera(cameraPosition=[0.2, 0.2, 1.4])
+            self.cam.calibration()
 
         self.cam.start()
 
         rgb, _ = self.cam.get_frames()
         undistorted = self.cam.undistort(rgb)
 
-        # Calibrate camera using marker (always flat on table)
+        # Calibrate camera using all 3 markers (more robust than single-marker)
         if self.sim_cam:
-            success = self.cam.calibrate_from_marker(
-                rgb,
-                marker_id=7,
-                marker_position=np.array([0, -0.43*POS_SCALE, 0])
-            )
+            self.cam.calibrate_from_marker(rgb, marker_positions={
+                7: [-0.43*POS_SCALE, 0,              0],
+                6: [-0.43*POS_SCALE, -0.43*POS_SCALE, 0],
+                4: [0,              -0.43*POS_SCALE, 0],
+            })
         else:
-            success = self.cam.calibrate_from_marker(
-                rgb,
-                marker_id=7,
-                marker_position=np.array([-0.43*POS_SCALE, 0, 0])
-            )
+            self.cam.calibrate_from_marker(rgb, marker_positions={
+                7: [0,              -0.43*POS_SCALE, 0],
+                6: [0.43*POS_SCALE, -0.43*POS_SCALE, 0],
+                4: [0.43*POS_SCALE, 0,              0],
+            })
+
 
         print(f"Position: {self.cam.position}")
 
@@ -176,7 +177,7 @@ class Main(BaseApp):
             for k in range(traj.X.shape[2]):
                 step_ee = EndEffector()
                 step_ee.x,    step_ee.y,    step_ee.z    = traj.X[0, 0, k], traj.X[1, 0, k], traj.X[2, 0, k]
-                step_ee.rotx, step_ee.roty, step_ee.rotz = traj.X[3, 0, k], traj.X[4, 0, k], traj.X[5, 0, k]
+                step_ee.rotx, step_ee.roty, step_ee.rotz = 0, -pi/2, 0
                 q = calc_inverse_kinematics(step_ee, q)
                 self.kinova_robot.set_joint_angles(q, gripper_percentage=0)
                 if self.sim: self.kinova_robot.base_kinova.destroy(ball_ids[k])
