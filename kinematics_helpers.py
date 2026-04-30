@@ -210,38 +210,52 @@ def compute_transforms(joint_values):
         
     return H_cumulative, Hlist
 
-def calc_forward_kinematics(joint_values: list, radians=True):
-    """
-    Calculate Forward Kinematics (FK) based on the given joint angles.
+# def calc_forward_kinematics(joint_values: list, radians=True):
+#     """
+#     Calculate Forward Kinematics (FK) based on the given joint angles.
 
-    Args:
-        joint_values (list): Joint angles (in radians if radians=True, otherwise in degrees).
-        radians (bool): Whether the input angles are in radians (default is False).
-    """
-    curr_joint_values = joint_values.copy()
+#     Args:
+#         joint_values (list): Joint angles (in radians if radians=True, otherwise in degrees).
+#         radians (bool): Whether the input angles are in radians (default is False).
+#     """
+#     curr_joint_values = joint_values.copy()
 
-    if not radians: # Convert degrees to radians if the input is in degrees
-        curr_joint_values = [np.deg2rad(theta) for theta in curr_joint_values]
+#     if not radians: # Convert degrees to radians if the input is in degrees
+#         curr_joint_values = [np.deg2rad(theta) for theta in curr_joint_values]
 
-    # Ensure that the joint angles respect the joint limits
-    for i, theta in enumerate(curr_joint_values):
-        curr_joint_values[i] = np.clip(theta, joint_limits[i][0], joint_limits[i][1])
+#     # Ensure that the joint angles respect the joint limits
+#     for i, theta in enumerate(curr_joint_values):
+#         curr_joint_values[i] = np.clip(theta, joint_limits[i][0], joint_limits[i][1])
     
-    H_cumulative, Hlist = compute_transforms(curr_joint_values)
+#     H_cumulative, Hlist = compute_transforms(curr_joint_values)
 
-    # Calculate EE position and rotation
-    H_ee = H_cumulative[-1]  # Final transformation matrix for EE
+#     # Calculate EE position and rotation
+#     H_ee = H_cumulative[-1]  # Final transformation matrix for EE
 
-    # Set the end effector (EE) position
+#     # Set the end effector (EE) position
+#     ee = EndEffector()
+#     ee.x, ee.y, ee.z = (H_ee @ np.array([0, 0, 0, 1]))[:3]
+    
+#     # Extract and assign the RPY (roll, pitch, yaw) from the rotation matrix
+#     rpy = rotm_to_euler(H_ee[:3, :3])
+#     ee.rotx, ee.roty, ee.rotz = rpy[0], rpy[1], rpy[2]
+
+#     return ee, Hlist
+
+def calc_forward_kinematics(joint_values: list, radians: bool = True):
+    q = np.array(joint_values, copy=True, dtype=float)
+    if not radians:
+        q = np.deg2rad(q)
+
+    H_cumulative, Hlist = compute_transforms(q)
+    H_ee = H_cumulative[-1]
+
     ee = EndEffector()
-    ee.x, ee.y, ee.z = (H_ee @ np.array([0, 0, 0, 1]))[:3]
-    
-    # Extract and assign the RPY (roll, pitch, yaw) from the rotation matrix
+    ee.x, ee.y, ee.z = H_ee[0, 3], H_ee[1, 3], H_ee[2, 3]
     rpy = rotm_to_euler(H_ee[:3, :3])
-    ee.rotx, ee.roty, ee.rotz = rpy[0], rpy[1], rpy[2]
-
+    ee.rotx, ee.roty, ee.rotz = rpy
     return ee, Hlist
-
+    
 def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300):
     """
     Numerical IK with angles wrapped to [-pi, pi] and joint limit enforcement.
@@ -297,22 +311,72 @@ def calc_numerical_ik(ee, joint_values, pos_tol=0.005, ori_tol=0.005, ilimit=300
     # return null if not converged
     return np.zeros(len(joint_values))
 
-def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
-    q = np.array(q_guess if q_guess is not None else [0.0]*6, dtype=float)
-    lambda_sq = 0.01  # Damping factor for singularity robustness
+# def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
+#     q = np.array(q_guess if q_guess is not None else [0.0]*6, dtype=float)
+#     lambda_sq = 0.01  # Damping factor for singularity robustness
     
-    # Target pose extraction
+#     # Target pose extraction
+#     p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
+#     R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
+#     for _ in range(100):
+#         for _ in range(ilimit):
+#             H_c, _ = compute_transforms(q)
+#             H_ee = H_c[-1]
+            
+#             # Position Error
+#             dp = p_targ - H_ee[:3, 3]
+            
+#             # Orientation Error (Skew symmetric matrix)
+#             R_curr = H_ee[:3, :3]
+#             R_err = R_targ @ R_curr.T
+#             do = 0.5 * np.array([
+#                 R_err[2, 1] - R_err[1, 2],
+#                 R_err[0, 2] - R_err[2, 0],
+#                 R_err[1, 0] - R_err[0, 1]
+#             ])
+
+#             # Combine position and orientation erros
+#             error = np.hstack([dp, do])
+#             if np.linalg.norm(error) < tol:
+#                 return [wraptopi(val) for val in q]
+
+#             # Damped Least Squares Update
+#             J = jacobian(q)
+#             JJT = J @ J.T + lambda_sq * np.eye(6)
+#             dq = J.T @ np.linalg.solve(JJT, error)
+#             q += dq
+#             limits = np.array(joint_limits)
+#             q = np.clip(q, limits[:, 0], limits[:, 1])
+#         q = np.array(sample_valid_joints(), dtype=float)
+#     print("didn't converge u suck :(")
+#     return q
+
+def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150, n_tries=5):
+    lambda_sq = 0.01
+    best_q = None
+    best_q1 = float("inf")
+
+    # Target pose
     p_targ = np.array([target_ee.x, target_ee.y, target_ee.z])
     R_targ = euler_to_rotm((target_ee.rotx, target_ee.roty, target_ee.rotz))
-    for _ in range(100):
+
+    for attempt in range(n_tries):
+        # Initialize guess
+        if attempt == 0 and q_guess is not None:
+            q = np.array(q_guess, dtype=float)
+        else:
+            q = np.array(sample_valid_joints(), dtype=float)
+
+        converged = False
+
         for _ in range(ilimit):
             H_c, _ = compute_transforms(q)
             H_ee = H_c[-1]
-            
-            # Position Error
+
+            # Position error
             dp = p_targ - H_ee[:3, 3]
-            
-            # Orientation Error (Skew symmetric matrix)
+
+            # Orientation error
             R_curr = H_ee[:3, :3]
             R_err = R_targ @ R_curr.T
             do = 0.5 * np.array([
@@ -321,21 +385,34 @@ def calc_inverse_kinematics(target_ee, q_guess=None, tol=1e-4, ilimit=150):
                 R_err[1, 0] - R_err[0, 1]
             ])
 
-            # Combine position and orientation erros
             error = np.hstack([dp, do])
-            if np.linalg.norm(error) < tol:
-                return [wraptopi(val) for val in q]
 
-            # Damped Least Squares Update
+            if np.linalg.norm(error) < tol:
+                converged = True
+                break
+
+            # DLS step
             J = jacobian(q)
             JJT = J @ J.T + lambda_sq * np.eye(6)
             dq = J.T @ np.linalg.solve(JJT, error)
             q += dq
+
             limits = np.array(joint_limits)
             q = np.clip(q, limits[:, 0], limits[:, 1])
-        q = np.array(sample_valid_joints(), dtype=float)
 
-    return q
+        if converged:
+            q_wrapped = np.array([wraptopi(val) for val in q])
+
+            # Pick solution with smallest q[1]
+            if abs(q_wrapped[1]) < abs(best_q1):
+                best_q1 = q_wrapped[1]
+                best_q = q_wrapped
+
+    if best_q is not None:
+        return best_q.tolist()
+
+    print("didn't converge u suck :(")
+    return q.tolist()
 
 def jacobian(joint_values: list):
     """
