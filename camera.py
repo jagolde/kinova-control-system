@@ -32,47 +32,125 @@ class CameraBase:
         # 2D (x,y) correction computed during calibration refinement: world_xy = R @ raw_xy + t
         self.xy_correction = (np.eye(2), np.zeros(2))
 
-    def find_all_markers(self, rgb, marker_size=0.1016, showIDs=False, ids=[0,1,2,3,4,5,6,7]):
-        '''
-        Finds aruco markers within the rgb image
-        '''
+    # def find_all_markers(self, rgb, marker_size, showIDs=False, ids=[0,1,2,3,4,5,6,7]):
+    #     '''
+    #     Finds aruco markers within the rgb image
+    #     '''
+    #     gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
+    #     aruco_dict = cv.aruco.getPredefinedDictionary(
+    #         cv.aruco.DICT_APRILTAG_36H11)
+    #     parameters = cv.aruco.DetectorParameters()
+
+    #     # Create the ArUco detector
+    #     detector = cv.aruco.ArucoDetector(aruco_dict, parameters)
+    #     # Detect the markers
+    #     corners, self.ids, _ = detector.detectMarkers(gray)
+
+    #     if self.ids is not None and showIDs:
+    #         cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
+    #         plt.imshow(rgb)
+    #         plt.show()
+
+    #     if self.ids is not None:
+    #         rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
+    #             corners, marker_size, self.K, self.distortion
+    #         )
+
+    #         for i, marker_id in enumerate(self.ids):
+    #             mid = int(marker_id[0])
+    #             if mid in self.ids:
+    #                 R, _ = cv.Rodrigues(rvecs[i])
+    #                 T = np.vstack(
+    #                     (np.hstack((R, tvecs[i].reshape(3, 1))), [0, 0, 0, 1]))
+
+    #                 self.Rs[mid] = R
+    #                 self.Ts[mid] = T
+
+    #                 p_cam = np.append(tvecs[i][0], 1.0)
+
+    #                 self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+    #                 self.world_positions[mid][2] += CUP_Z
+    #                 self.world_positions[mid] = self.world_positions[mid]
+    #                 R_corr, t_corr = self.xy_correction
+    #                 self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
+
+    def find_all_markers(self, rgb, showIDs=False):
+        """
+        Detects ArUco/AprilTag markers and computes their poses
+        using per-marker physical sizes.
+        """
+
         gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
+
         aruco_dict = cv.aruco.getPredefinedDictionary(
-            cv.aruco.DICT_APRILTAG_36H11)
+            cv.aruco.DICT_APRILTAG_36H11
+        )
         parameters = cv.aruco.DetectorParameters()
-
-        # Create the ArUco detector
         detector = cv.aruco.ArucoDetector(aruco_dict, parameters)
-        # Detect the markers
-        corners, self.ids, _ = detector.detectMarkers(gray)
 
-        if self.ids is not None and showIDs:
-            cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
+        # --- Detect once ---
+        corners, ids, _ = detector.detectMarkers(gray)
+
+        if ids is None:
+            return
+
+        ids = ids.flatten()
+
+        if showIDs:
+            cv.aruco.drawDetectedMarkers(rgb, corners, ids.reshape(-1, 1))
             plt.imshow(rgb)
             plt.show()
 
-        if self.ids is not None:
+        # --- Define marker sizes ---
+        marker_sizes = {
+            0: 0.052,
+            1: 0.052,
+            2: 0.052,
+            3: 0.052,
+            5: 0.052,
+            4: 0.1016,
+            6: 0.1016,
+            7: 0.1016
+        }
+
+        # --- Process each detected marker ---
+        for i, marker_id in enumerate(ids):
+
+            if marker_id not in marker_sizes:
+                continue  # ignore unknown markers
+
+            marker_size = marker_sizes[marker_id]
+
             rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-                corners, marker_size, self.K, self.distortion
+                [corners[i]], marker_size, self.K, self.distortion
             )
 
-            for i, marker_id in enumerate(self.ids):
-                if marker_id in ids:
-                    mid = int(marker_id[0])
-                    R, _ = cv.Rodrigues(rvecs[i])
-                    T = np.vstack(
-                        (np.hstack((R, tvecs[i].reshape(3, 1))), [0, 0, 0, 1]))
+            rvec = rvecs[0]
+            tvec = tvecs[0]
 
-                    self.Rs[mid] = R
-                    self.Ts[mid] = T
+            R, _ = cv.Rodrigues(rvec)
 
-                    p_cam = np.append(tvecs[i][0], 1.0)
+            T = np.vstack(
+                (np.hstack((R, tvec.reshape(3, 1))),
+                [0, 0, 0, 1])
+            )
 
-                    self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
-                    self.world_positions[mid][2] += CUP_Z
-                    self.world_positions[mid] = self.world_positions[mid]
-                    R_corr, t_corr = self.xy_correction
-                    self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
+            # store rotation + transform
+            self.Rs[marker_id] = R
+            self.Ts[marker_id] = T
+
+            # camera position (already in camera frame)
+            p_cam = tvec.reshape(3)
+
+            world_pos = (self.cam_to_world @ np.append(p_cam, 1.0))[:3]
+
+            # apply domain correction
+            world_pos[2] += CUP_Z
+
+            R_corr, t_corr = self.xy_correction
+            world_pos[:2] = R_corr @ world_pos[:2] + t_corr
+
+            self.world_positions[marker_id] = world_pos
 
     def calibrate_from_marker(self, marker_positions: dict, marker_size=0.1016):
         """

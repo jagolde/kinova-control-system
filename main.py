@@ -20,11 +20,15 @@ from trajectory_classes import MultiSegmentTrajectoryGenerator, QuinticPolynomia
 
 POS_SCALE = 1
 
-POUR_CUP_ID = 0
-FILL_CUP_ID = 1
+POUR_CUP_ID_1 = 5
+POUR_CUP_ID_2 = 3
+FILL_CUP_ID = 2
 
-FILL_CUP_OFFSET = np.array([-0.10, 0, 0.03])
-POUR_CUP_OFFSET = np.array([-0.10, 0, 0.03])
+FILL_CUP_OFFSET = np.array([0.05, 0.08, 0.03])
+POUR_CUP_OFFSET = np.array([0.03, 0, 0.015])
+POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
+FILL_ABOVE_OFFSET = np.array([0, 0, 0.17])
+SMALL_ABOVE_OFFSET = np.array([0, 0, 0.005])
 
 ARM_BASE = np.array([0, 0, 0])
 HOME_POSITION = np.array(
@@ -73,16 +77,16 @@ class Main(BaseApp):
         print(f"Position: {self.cam.position}")
 
         # Finds all markers world positions
-        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.1016, ids=[4,6,7])
-        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.508, ids=[0,1,2,3,5])
-
+        self.cam.find_all_markers(undistorted, showIDs=True)
         if len(self.cam.world_positions) > 0:
-            self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
-            self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
-            self.pour_cup = POUR_CUP_OFFSET
-            self.fill_cup = FILL_CUP_OFFSET
+            print("Accessing world_positions:", self.cam.world_positions.keys())
+            print("Looking for ID:", POUR_CUP_ID_1)
+            self.pour_cup_1 = self.cam.world_positions[POUR_CUP_ID_1] + POUR_CUP_OFFSET
+            self.pour_cup_2 = self.cam.world_positions[POUR_CUP_ID_2] + POUR_CUP_OFFSET
+            self.fill_cup = self.cam.world_positions[FILL_CUP_ID] + FILL_CUP_OFFSET
 
-        print(f"pour cup pos: {self.pour_cup}")
+        print(f"pour cup 1 pos: {self.pour_cup_1}")
+        print(f"pour cup 2 pos: {self.pour_cup_2}")
         print(f"fill cup pos: {self.fill_cup}")
 
         self.action_steps = []
@@ -108,88 +112,88 @@ class Main(BaseApp):
 
         elif self.state == "WAITING":
             root = tk.Tk()
+            cups = [self.pour_cup_1, self.pour_cup_2, self.pour_cup_1]
 
             button = make_button(
-                root=root, command=self.basic_pour_button, text="Make Drink")
+                root=root,
+                command=lambda *args: self.basic_pour_button(root, cups),
+                text="Make Drink"
+            )
+            # button = make_button(
+            #     root=root, command=self.basic_pour_button, text="Make Drink")
             button.pack(padx=20, pady=20)
             root.mainloop()
 
-    def basic_pour_button(self, root):
+    # 
+    def basic_pour_button(self, root, cups):
         self.action_steps = []
         self.action_index = 0
 
-
-        # 1. Move above can
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0]-0.02, self.pour_cup[1], self.pour_cup[2]+0.2
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 1. down to cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0]-0.02, self.pour_cup[1], self.pour_cup[2]
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 4. Close gripper
-        self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
-
-        # 1. lift cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 3. Move above fill cup position
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup[0], self.fill_cup[1]+0.05, self.fill_cup[2]+0.17
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # turn cup over
-        bs = [0,0,0,0,0,2,100]
-        self.action_steps.append((self.move_joint, (bs,)))
-
-        # 3. unrotate
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup[0], self.fill_cup[1], self.fill_cup[2]+0.17
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 1. move back
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 1. move down
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.01
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 4. open gripper
-        self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
-
-        # 1. move back
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0]-0.1, self.pour_cup[1], self.pour_cup[2]+0.2
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # find desired location from aruco marker
-        # make two steps before desired location: move backward and move up
+        for cup in cups:
+            self._add_pour_sequence(cup)
 
         self.state = "ACTING"
         root.destroy()
+
+
+    def _add_pour_sequence(self, cup):
+        # 1. Move above cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 2. down to cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 3. close gripper
+        self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
+
+        # 4. lift cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 5. move above fill cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup + FILL_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 6. turn cup over
+        bs = [0,0,0,0,0,2,100]
+        self.action_steps.append((self.move_joint, (bs,)))
+
+        # 7. move above fill again
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup + FILL_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 8. return above cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 9. lower slightly
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup + SMALL_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 10. open gripper
+        self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
+
+        # 11. retreat
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
 
     def move_ee(self, ee, T=5.0, nsteps=2, mode="task"):
         """Move to end effector position using a task-space quintic trajectory."""
