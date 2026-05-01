@@ -32,7 +32,7 @@ class CameraBase:
         # 2D (x,y) correction computed during calibration refinement: world_xy = R @ raw_xy + t
         self.xy_correction = (np.eye(2), np.zeros(2))
 
-    def find_all_markers(self, rgb, marker_size=0.1016, showIDs=False):
+    def find_all_markers(self, rgb, marker_size=0.1016, showIDs=False, ids=[0,1,2,3,4,5,6,7]):
         '''
         Finds aruco markers within the rgb image
         '''
@@ -57,21 +57,22 @@ class CameraBase:
             )
 
             for i, marker_id in enumerate(self.ids):
-                mid = int(marker_id[0])
-                R, _ = cv.Rodrigues(rvecs[i])
-                T = np.vstack(
-                    (np.hstack((R, tvecs[i].reshape(3, 1))), [0, 0, 0, 1]))
+                if marker_id in ids:
+                    mid = int(marker_id[0])
+                    R, _ = cv.Rodrigues(rvecs[i])
+                    T = np.vstack(
+                        (np.hstack((R, tvecs[i].reshape(3, 1))), [0, 0, 0, 1]))
 
-                self.Rs[mid] = R
-                self.Ts[mid] = T
+                    self.Rs[mid] = R
+                    self.Ts[mid] = T
 
-                p_cam = np.append(tvecs[i][0], 1.0)
+                    p_cam = np.append(tvecs[i][0], 1.0)
 
-                self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
-                self.world_positions[mid][2] += CUP_Z
-                self.world_positions[mid] = self.world_positions[mid]
-                R_corr, t_corr = self.xy_correction
-                self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
+                    self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
+                    self.world_positions[mid][2] += CUP_Z
+                    self.world_positions[mid] = self.world_positions[mid]
+                    R_corr, t_corr = self.xy_correction
+                    self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
 
     def calibrate_from_marker(self, marker_positions: dict, marker_size=0.1016):
         """

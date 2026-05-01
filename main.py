@@ -23,8 +23,8 @@ POS_SCALE = 1
 POUR_CUP_ID = 0
 FILL_CUP_ID = 1
 
-FILL_CUP_OFFSET = np.array([-0.25, 0, 0])
-POUR_CUP_OFFSET = np.array([-0.25, 0, 0])
+FILL_CUP_OFFSET = np.array([-0.10, 0, 0.03])
+POUR_CUP_OFFSET = np.array([-0.10, 0, 0.03])
 
 ARM_BASE = np.array([0, 0, 0])
 HOME_POSITION = np.array(
@@ -73,13 +73,14 @@ class Main(BaseApp):
         print(f"Position: {self.cam.position}")
 
         # Finds all markers world positions
-        self.cam.find_all_markers(undistorted, showIDs=True)
+        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.1016, ids=[4,6,7])
+        self.cam.find_all_markers(undistorted, showIDs=True, marker_size=0.508, ids=[0,1,2,3,5])
 
         if len(self.cam.world_positions) > 0:
             self.pour_cup = self.cam.world_positions[POUR_CUP_ID]
             self.fill_cup = self.cam.world_positions[FILL_CUP_ID]
-            self.pour_cup[2] = 0.03
-            self.fill_cup[2] = 0.03
+            self.pour_cup = POUR_CUP_OFFSET
+            self.fill_cup = FILL_CUP_OFFSET
 
         print(f"pour cup pos: {self.pour_cup}")
         print(f"fill cup pos: {self.fill_cup}")
