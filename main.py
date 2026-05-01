@@ -120,14 +120,14 @@ class Main(BaseApp):
 
         # 1. Move above can
         ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]+0.2
+        ee.x, ee.y, ee.z = self.pour_cup[0]-0.02, self.pour_cup[1], self.pour_cup[2]+0.2
         ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
         
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 1. down to cup
         ee = EndEffector()
-        ee.x, ee.y, ee.z = self.pour_cup[0], self.pour_cup[1], self.pour_cup[2]
+        ee.x, ee.y, ee.z = self.pour_cup[0]-0.02, self.pour_cup[1], self.pour_cup[2]
         ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
         
         self.action_steps.append((self.move_ee, (ee,)))
@@ -176,6 +176,13 @@ class Main(BaseApp):
 
         # 4. open gripper
         self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
+
+        # 1. move back
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.pour_cup[0]-0.1, self.pour_cup[1], self.pour_cup[2]+0.2
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        
+        self.action_steps.append((self.move_ee, (ee,)))
 
         # find desired location from aruco marker
         # make two steps before desired location: move backward and move up

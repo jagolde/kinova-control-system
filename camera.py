@@ -91,6 +91,7 @@ class CameraBase:
         detector = cv.aruco.ArucoDetector(aruco_dict)
 
         corners, ids, _ = detector.detectMarkers(gray)
+        print("Detected IDs:", ids.flatten() if ids is not None else None)
 
         if ids is None:
             raise RuntimeError("No markers detected during calibration")
