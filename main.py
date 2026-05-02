@@ -147,41 +147,7 @@ class Main(BaseApp):
                 self.state = "WAITING"
 
         elif self.state == "WAITING":
-            root = tk.Tk()
-            
-            cup_1_button = make_button(
-                root=root,
-                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1]),
-                text="Drink 1"
-            )
-
-            cup_2_button = make_button(
-                root=root,
-                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_2]),
-                text="Drink 2"
-            )
-
-            mix_button = make_button(
-                root=root,
-                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1, self.pour_cup_2]),
-                text="Mixed"
-            )
-
-            cup_1_button.pack(padx=20, pady=20)
-            cup_2_button.pack(padx=20, pady=20)
-            mix_button.pack(padx=20, pady=20)
-            root.mainloop()
-
-    # 
-    def pour_cup_button(self, root, cups):
-        self.action_steps = []
-        self.action_index = 0
-
-        for cup in cups:
-            self._add_pour_sequence(cup)
-
-        self.state = "ACTING"
-        root.destroy()
+            self.tkinter_setup()
 
 
     def _add_pour_sequence(self, cup):
@@ -280,6 +246,64 @@ class Main(BaseApp):
         new_angles = self.currrent_angles+np.array(joint_angles[0:6])
         self.kinova_robot.set_joint_angles(new_angles, gripper_percentage=joint_angles[6])
         self.currrent_angles = joint_angles[0:6]
+
+    def pour_cup_button(self, root, cups):
+        self.action_steps = []
+        self.action_index = 0
+
+        for cup in cups:
+            self._add_pour_sequence(cup)
+
+        self.state = "ACTING"
+        root.destroy()
+
+    def tkinter_setup(self):
+        root = tk.Tk()
+        root.geometry("800x600")
+
+        from PIL import Image, ImageTk
+        bg_img = ImageTk.PhotoImage(Image.open("menu_background.jpg").resize((800, 600)))
+
+        canvas = tk.Canvas(root, width=800, height=600, highlightthickness=0)
+        canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        canvas.create_image(0, 0, anchor="nw", image=bg_img)
+        canvas.image = bg_img
+
+        # Buttons
+        cup_1_button = make_button(
+            root=root,
+            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1]),
+            text="Water",
+            width=25,
+            height=1,
+            wraplength=0
+        )
+        cup_2_button = make_button(
+            root=root,
+            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_2]),
+            text="Water",
+            width=25,
+            height=1,
+            wraplength=0
+        )
+        mix_button = make_button(
+            root=root,
+            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1, self.pour_cup_2]),
+            text="Mixed (so still just water)",
+            width=25,
+            height=1,
+            wraplength=0
+        )
+
+        canvas.create_text(400, 295, text="Pour Cup 1", font=("Arial", 8), fill="gray")
+        canvas.create_text(400, 355, text="Pour Cup 2", font=("Arial", 8), fill="gray")
+
+        cup_1_button.place(relx=0.5, rely=0.45, anchor="center")
+        cup_2_button.place(relx=0.5, rely=0.55, anchor="center")
+        mix_button.place(relx=0.5,   rely=0.65, anchor="center")
+
+        root.mainloop()
+
 
 
 if __name__ == "__main__":
