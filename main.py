@@ -40,13 +40,13 @@ POUR_TAG_1_ID = 5
 POUR_TAG_2_ID = 3
 FILL_TAG_ID = 2
 
+FILL_CUP_OFFSET = np.array([0.10, 0.082, 0])
+POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
 
 # Cup Offsets
-FILL_CUP_OFFSET = np.array([0.05, 0.08, 0.03])
-POUR_CUP_OFFSET = np.array([0.03, 0, 0.015])
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
-FILL_ABOVE_OFFSET = np.array([0, 0, 0.17])
-SMALL_ABOVE_OFFSET = np.array([0, 0, 0.005])
+FILL_ABOVE_OFFSET = np.array([0, 0, 0.11])
+SMALL_ABOVE_OFFSET = np.array([0, 0, 0.003])
 
 # Sim Offset
 TEST_CUP_OFFSET = np.array([0.015, 0, 0.015])
@@ -168,6 +168,16 @@ class Main(BaseApp):
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 5. move above fill cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 5. move above fill cup
+        ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 5. move above fill cup
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
@@ -177,6 +187,12 @@ class Main(BaseApp):
 
         # 7. move above fill again
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 5. move above fill cup
+        ee = EndEffector()
+        ee.x, ee.y, ee.z = self.fill_cup + POUR_ABOVE_OFFSET
+        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 8. return above cup
@@ -308,7 +324,7 @@ class Main(BaseApp):
 
 if __name__ == "__main__":
     final_project = Main(
-        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        simulate=False, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:
