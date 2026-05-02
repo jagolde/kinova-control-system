@@ -265,8 +265,6 @@ class SimKinova:
         self.p.setGravity(0, 0, -9.81)
         self.p.loadURDF("plane.urdf")
 
-        self.sim_objects()
-
         if not self.urdf_path:
             raise ValueError("urdf_path must be provided to use simulation mode.")
 
@@ -453,7 +451,7 @@ class SimKinova:
                 joint,
                 self.p.POSITION_CONTROL,
                 targetPosition=target,
-                force=50,
+                force=75,
             )
 
     def set_joint_angles(self, angles, gripper_percentage=None, wait=True):
@@ -507,30 +505,22 @@ class SimKinova:
                 self.p.disconnect()
             except:
                 pass
-    
-    def sim_objects(self):
+
+    def create_apriltag(self, pos=[0,0,0], id=0, size=.1016):
         p = self.p
-
-        april_tag_texture_0 = p.loadTexture("apriltagtextures/apriltag7.png")
-        april_tag_texture_1 = p.loadTexture("apriltagtextures/apriltag6.png")
-        april_tag_texture_2 = p.loadTexture("apriltagtextures/apriltag4.png")
-
+        scale = [size/2, size/2, 1]
         quad = "apriltagtextures/flat_quad.obj"
-        scale = [0.0508, 0.0508, 1]
-        april_tag_shape_0 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
-        april_tag_shape_1 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
-        april_tag_shape_2 = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
 
-        april_tag_0 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_0, basePosition=[0.42*POS_SCALE, 0, 0.01])
-        april_tag_1 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_1, basePosition=[0.42*POS_SCALE, 0.42*POS_SCALE, 0.01])
-        april_tag_2 = p.createMultiBody(baseVisualShapeIndex=april_tag_shape_2, basePosition=[0, 0.42*POS_SCALE, 0.01])
+        pos[2] += 0.01
 
-        p.changeVisualShape(april_tag_0, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_0)
-        p.changeVisualShape(april_tag_1, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_1)
-        p.changeVisualShape(april_tag_2, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=april_tag_texture_2)
+        texture = p.loadTexture(f"apriltagtextures/apriltag{id}.png")
+        shape = p.createVisualShape(p.GEOM_MESH, fileName=quad, meshScale=scale, rgbaColor=[1, 1, 1, 1])
+        obj = p.createMultiBody(baseVisualShapeIndex=shape, basePosition=pos)
 
-    def create_ball(self, pos=[0,0,0], end=False):
-        radius = 0.05
+        p.changeVisualShape(obj, -1, rgbaColor=[1, 1, 1, 1], textureUniqueId=texture)
+
+    def create_ball(self, pos=[0,0,0], end=False, radius=0.05):
+        p = self.p
         mass = 0
 
         if end:
@@ -539,16 +529,47 @@ class SimKinova:
             color = [1,0,0,0.5]
 
         # Create collision and visual shapes
-        colSphereId = self.p.createCollisionShape(self.p.GEOM_SPHERE, radius=radius)
-        visualShapeId = self.p.createVisualShape(self.p.GEOM_SPHERE, radius=radius, rgbaColor=color) # Red
+        colSphereId = p.createCollisionShape(p.GEOM_SPHERE, radius=radius)
+        visualShapeId = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color) # Red
 
         # Create the body
-        ballId = self.p.createMultiBody(baseMass=mass,
+        ballId = p.createMultiBody(baseMass=mass,
                                 baseCollisionShapeIndex=-1,
                                 baseVisualShapeIndex=visualShapeId,
                                 basePosition=pos)
         
         return ballId
+    
+    def create_cup(self, pos=[0,0,0]):
+        p = self.p
+        radius = 0.02
+        height = 0.1
+
+        pos[2] += height/3
+
+        # 1. Create Collision Shape
+        colCylinderId = p.createCollisionShape(
+            p.GEOM_CYLINDER, 
+            radius=radius, 
+            height=height
+        )
+
+        # 2. Create Visual Shape (Optional, for rendering)
+        visualShapeId = p.createVisualShape(
+            p.GEOM_CYLINDER,
+            radius=radius,
+            length=height,
+            rgbaColor=[0, 1, 0, 1] # Green
+        )
+
+        # 3. Create MultiBody
+        cylinderId = p.createMultiBody(
+            baseMass=1,
+            baseCollisionShapeIndex=colCylinderId,
+            baseVisualShapeIndex=visualShapeId,
+            basePosition=pos,
+            baseOrientation=[0, 0, 0, 1]
+        )
 
     def destroy(self, id):
         self.p.removeBody(id)
