@@ -44,13 +44,9 @@ FILL_CUP_OFFSET = np.array([0.10, 0.082, 0])
 POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
 
 # Cup Offsets
-FILL_CUP_OFFSET = np.array([0.05, 0.08, 0.03])
-POUR_CUP_OFFSET = np.array([0.03, 0, 0.015])
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
 FILL_ABOVE_OFFSET = np.array([0, 0, 0.11])
 SMALL_ABOVE_OFFSET = np.array([0, 0, 0.003])
-FILL_ABOVE_OFFSET = np.array([0, 0, 0.17])
-SMALL_ABOVE_OFFSET = np.array([0, 0, 0.005])
 
 # Sim Offset
 TEST_CUP_OFFSET = np.array([0.015, 0, 0.015])
@@ -304,7 +300,7 @@ class Main(BaseApp):
 
 if __name__ == "__main__":
     final_project = Main(
-        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        simulate=False, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:
