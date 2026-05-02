@@ -2,6 +2,7 @@ from backend.kinova import BaseApp
 import time
 import numpy as np
 import pyrealsense2 as rs
+import matplotlib.pyplot as plt
 import cv2 as cv
 import tkinter as tk
 from math import pi
@@ -14,21 +15,45 @@ from kinematics_helpers import (
     EndEffector,
     calc_forward_kinematics,
     calc_numerical_ik,
-    calc_inverse_kinematics
+    calc_inverse_kinematics,
+    toEE
 )
 from trajectory_classes import MultiSegmentTrajectoryGenerator, QuinticPolynomial
 
-POS_SCALE = 1
 
-POUR_CUP_ID_1 = 5
-POUR_CUP_ID_2 = 3
-FILL_CUP_ID = 2
+# Corner April Tags
+BR_CORNER_TAG_POSITION = np.array([0,    -0.42, 0])
+TR_CORNER_TAG_POSITION = np.array([0.42, -0.42, 0])
+TL_CORNER_TAG_POSITION = np.array([0.42, 0,     0])
+
+BR_CORNER_TAG_ID = 7
+TR_CORNER_TAG_ID = 6
+TL_CORNER_TAG_ID = 4
+
+
+# Cup April Tags
+POUR_TAG_1_POSITION = np.array([0.3, -0.15, 0])
+POUR_TAG_2_POSITION = np.array([0.3, -0.30, 0])
+FILL_TAG_POSITION = np.array([0.2, -0.40, 0])
+
+POUR_TAG_1_ID = 5
+POUR_TAG_2_ID = 3
+FILL_TAG_ID = 2
 
 FILL_CUP_OFFSET = np.array([0.10, 0.082, 0])
 POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
+
+# Cup Offsets
+FILL_CUP_OFFSET = np.array([0.05, 0.08, 0.03])
+POUR_CUP_OFFSET = np.array([0.03, 0, 0.015])
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
 FILL_ABOVE_OFFSET = np.array([0, 0, 0.11])
 SMALL_ABOVE_OFFSET = np.array([0, 0, 0.003])
+FILL_ABOVE_OFFSET = np.array([0, 0, 0.17])
+SMALL_ABOVE_OFFSET = np.array([0, 0, 0.005])
+
+# Sim Offset
+TEST_CUP_OFFSET = np.array([0.015, 0, 0.015])
 
 ARM_BASE = np.array([0, 0, 0])
 HOME_POSITION = np.array(
@@ -47,11 +72,23 @@ class Main(BaseApp):
         if self.sim_cam:
             print("Sim Camera Connected")
             self.cam = SimCamera(kinova=self.kinova_robot,
-                                 cameraPosition=[0.2, 0.2, 1.4],
-                                 targetPosition=[0.2, 0.199, 0])
+                                 cameraPosition=[0.2, -0.2, 1.4],
+                                 targetPosition=[0.2, -0.199, 0])
+            
+            # Adjust for sim difference
+            self.kinova_robot.close_gripper()
+            
+            # Create simulator april tags
+            self.kinova_robot.base_kinova.create_apriltag(pos=TL_CORNER_TAG_POSITION, id=TL_CORNER_TAG_ID, size=.1016) # Corner tag
+            self.kinova_robot.base_kinova.create_apriltag(pos=TR_CORNER_TAG_POSITION, id=TR_CORNER_TAG_ID, size=.1016) # Corner tag
+            self.kinova_robot.base_kinova.create_apriltag(pos=BR_CORNER_TAG_POSITION, id=BR_CORNER_TAG_ID, size=.1016) # Corner tag
+
+            self.kinova_robot.base_kinova.create_apriltag(pos=POUR_TAG_1_POSITION, id=POUR_TAG_1_ID, size=.052) # Pour cup 1 tag
+            self.kinova_robot.base_kinova.create_apriltag(pos=POUR_TAG_2_POSITION, id=POUR_TAG_2_ID, size=.052) # Pour cup 1 tag
+            self.kinova_robot.base_kinova.create_apriltag(pos=FILL_TAG_POSITION, id=FILL_TAG_ID, size=.052) # Fill cup tag
         else:
             print("Realsense Camera Connected")
-            self.cam = RealsenseCamera(cameraPosition=[0.2, 0.2, 1.4])
+            self.cam = RealsenseCamera()
             self.cam.calibration()
 
         self.cam.start()
@@ -60,45 +97,48 @@ class Main(BaseApp):
         undistorted = self.cam.undistort(rgb)
 
         # Calibrate camera using all 3 markers (more robust than single-marker)
-        if self.sim_cam:
-            self.cam.calibrate_from_marker(marker_positions={
-                7: [-0.43*POS_SCALE, 0,              0],
-                6: [-0.43*POS_SCALE, -0.43*POS_SCALE, 0],
-                4: [0,              -0.43*POS_SCALE, 0],
-            })
-        else:
-            self.cam.calibrate_from_marker(marker_positions={
-                7: [0,              -0.43*POS_SCALE, 0],
-                6: [0.43*POS_SCALE, -0.43*POS_SCALE, 0],
-                4: [0.43*POS_SCALE, 0,              0],
-            })
-
-
-        print(f"Position: {self.cam.position}")
+        self.cam.calibrate_from_marker(marker_positions={
+            TL_CORNER_TAG_ID: TL_CORNER_TAG_POSITION,
+            TR_CORNER_TAG_ID: TR_CORNER_TAG_POSITION,
+            BR_CORNER_TAG_ID: BR_CORNER_TAG_POSITION,
+        })
 
         # Finds all markers world positions
-        self.cam.find_all_markers(undistorted, showIDs=True)
+        self.cam.find_all_markers(undistorted, showIDs=False)
         if len(self.cam.world_positions) > 0:
             print("Accessing world_positions:", self.cam.world_positions.keys())
-            print("Looking for ID:", POUR_CUP_ID_1)
-            self.pour_cup_1 = self.cam.world_positions[POUR_CUP_ID_1] + POUR_CUP_OFFSET
-            self.pour_cup_2 = self.cam.world_positions[POUR_CUP_ID_2] + POUR_CUP_OFFSET
-            self.fill_cup = self.cam.world_positions[FILL_CUP_ID] + FILL_CUP_OFFSET
+            self.pour_cup_1 = self.cam.world_positions[POUR_TAG_1_ID] + POUR_CUP_OFFSET
+            self.pour_cup_2 = self.cam.world_positions[POUR_TAG_2_ID] + POUR_CUP_OFFSET
+            self.fill_cup = self.cam.world_positions[FILL_TAG_ID] + FILL_CUP_OFFSET
+
+        # Show cup positions in sim
+        if self.sim_cam:
+            self.pour_cup_1[2] += 0.05
+            pour_cup_1_pos = (POUR_TAG_1_POSITION + POUR_CUP_OFFSET)
+            sim_pour_cup_1 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_1_POSITION+TEST_CUP_OFFSET))
+
+            self.pour_cup_2[2] += 0.05
+            pour_cup_2_pos = (POUR_TAG_2_POSITION + POUR_CUP_OFFSET)
+            sim_pour_cup_2 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_2_POSITION+TEST_CUP_OFFSET))
+
+            self.fill_cup[2] += 0.05
+            fill_cup_pos = (FILL_TAG_POSITION + POUR_CUP_OFFSET)
+            sim_fill_cup = self.kinova_robot.base_kinova.create_cup(pos=(FILL_TAG_POSITION+POUR_CUP_OFFSET))
+
+        
+        # Prepare queue
+        self.action_steps = []
+        self.action_index = 0
+
+        # Set initial state
+        self.state = "WAITING"
+
 
         print(f"pour cup 1 pos: {self.pour_cup_1}")
         print(f"pour cup 2 pos: {self.pour_cup_2}")
         print(f"fill cup pos: {self.fill_cup}")
-
-        self.action_steps = []
-        self.action_index = 0
-
-        self.state = "WAITING"
-
-        ee, _ = calc_forward_kinematics(self.kinova_robot.get_joint_angles())
-        if self.sim: b_id = self.kinova_robot.base_kinova.create_ball([ee.x, ee.y, ee.z], end=True)
-
         print("|-------------------------|")
-        print("           LOOP            ")
+        print("        LOOP STARTED       ")
         print("|-------------------------|")
 
     def loop(self):
@@ -112,20 +152,32 @@ class Main(BaseApp):
 
         elif self.state == "WAITING":
             root = tk.Tk()
-            cups = [self.pour_cup_1, self.pour_cup_2, self.pour_cup_1]
-
-            button = make_button(
+            
+            cup_1_button = make_button(
                 root=root,
-                command=lambda *args: self.basic_pour_button(root, cups),
-                text="Make Drink"
+                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1]),
+                text="Drink 1"
             )
-            # button = make_button(
-            #     root=root, command=self.basic_pour_button, text="Make Drink")
-            button.pack(padx=20, pady=20)
+
+            cup_2_button = make_button(
+                root=root,
+                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_2]),
+                text="Drink 2"
+            )
+
+            mix_button = make_button(
+                root=root,
+                command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1, self.pour_cup_2]),
+                text="Mixed"
+            )
+
+            cup_1_button.pack(padx=20, pady=20)
+            cup_2_button.pack(padx=20, pady=20)
+            mix_button.pack(padx=20, pady=20)
             root.mainloop()
 
     # 
-    def basic_pour_button(self, root, cups):
+    def pour_cup_button(self, root, cups):
         self.action_steps = []
         self.action_index = 0
 
@@ -138,24 +190,19 @@ class Main(BaseApp):
 
     def _add_pour_sequence(self, cup):
         # 1. Move above cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 2. down to cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 3. close gripper
-        self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
+        if self.sim: self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
+        else: self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
 
         # 4. lift cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 5. move above fill cup
@@ -165,19 +212,19 @@ class Main(BaseApp):
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 5. move above fill cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup + FILL_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 5. move above fill cup
+        ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 6. turn cup over
-        bs = [0,0,0,0,0,2,100]
-        self.action_steps.append((self.move_joint, (bs,)))
+        if self.sim: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,0],)))
+        else: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,100],)))
 
         # 7. move above fill again
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup + FILL_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 5. move above fill cup
@@ -187,24 +234,19 @@ class Main(BaseApp):
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 8. return above cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 9. lower slightly
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup + SMALL_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup + SMALL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 10. open gripper
-        self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
+        if self.sim: self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
+        else: self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
 
         # 11. retreat
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
+        ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
     def move_ee(self, ee, T=5.0, nsteps=2, mode="task"):
@@ -212,7 +254,6 @@ class Main(BaseApp):
         # Build waypoints: [x, y, z, rotx, roty, rotz]\
         curr_angles = self.kinova_robot.get_joint_angles()
         curr_ee, _ = calc_forward_kinematics(curr_angles)
-        # b_id = self.kinova_robot.base_kinova.create_ball([curr_ee.x, curr_ee.y, curr_ee.z], end=True)
 
         if mode == "task":
             waypoints = np.array([
@@ -243,31 +284,27 @@ class Main(BaseApp):
         q = curr_angles.copy()
         if mode == "task":
             for k in range(traj.X.shape[2]):
-                step_ee = EndEffector()
-                step_ee.x,    step_ee.y,    step_ee.z    = traj.X[0, 0, k], traj.X[1, 0, k], traj.X[2, 0, k]
-                step_ee.rotx, step_ee.roty, step_ee.rotz = traj.X[3, 0, k], traj.X[4, 0, k], traj.X[5, 0, k]
+                step_ee = toEE(traj.X[0:6,0,k])
                 q = calc_inverse_kinematics(step_ee, q)
                 self.kinova_robot.set_joint_angles(q)
                 self.currrent_angles = q
-                if self.sim: self.kinova_robot.base_kinova.destroy(ball_ids[k])
-            # q = calc_inverse_kinematics(ee, q)
-            # self.kinova_robot.set_joint_angles(q, gripper_percentage=0)
+                if self.sim and k > 0: self.kinova_robot.base_kinova.destroy(ball_ids[k-1])
+
         elif mode == "joint":
             for k in range(traj.X.shape[2]):
                 self.kinova_robot.set_joint_angles(traj.X[:, 0, k])
                 self.currrent_angles = q
-                if self.sim: self.kinova_robot.base_kinova.destroy(ball_ids[k])
+                if self.sim and k > 0: self.kinova_robot.base_kinova.destroy(ball_ids[k-1])
 
     def move_joint(self, joint_angles):
         new_angles = self.currrent_angles+np.array(joint_angles[0:6])
-        print(f"current: {self.currrent_angles} new: {new_angles}")
         self.kinova_robot.set_joint_angles(new_angles, gripper_percentage=joint_angles[6])
         self.currrent_angles = joint_angles[0:6]
 
 
 if __name__ == "__main__":
     final_project = Main(
-        simulate=False, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:

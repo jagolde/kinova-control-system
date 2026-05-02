@@ -470,3 +470,9 @@ def wraptopi(angle_rad):
         Equivalent angle in radians in the interval [-pi, pi).
     """
     return (angle_rad + math.pi) % (2 * math.pi) - math.pi
+
+def toEE(pos):
+    ee = EndEffector()
+    ee.x,    ee.y,    ee.z    = pos[0], pos[1], pos[2]
+    ee.rotx, ee.roty, ee.rotz = pos[3], pos[4], pos[5]
+    return ee

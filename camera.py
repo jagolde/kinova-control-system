@@ -32,48 +32,6 @@ class CameraBase:
         # 2D (x,y) correction computed during calibration refinement: world_xy = R @ raw_xy + t
         self.xy_correction = (np.eye(2), np.zeros(2))
 
-    # def find_all_markers(self, rgb, marker_size, showIDs=False, ids=[0,1,2,3,4,5,6,7]):
-    #     '''
-    #     Finds aruco markers within the rgb image
-    #     '''
-    #     gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
-    #     aruco_dict = cv.aruco.getPredefinedDictionary(
-    #         cv.aruco.DICT_APRILTAG_36H11)
-    #     parameters = cv.aruco.DetectorParameters()
-
-    #     # Create the ArUco detector
-    #     detector = cv.aruco.ArucoDetector(aruco_dict, parameters)
-    #     # Detect the markers
-    #     corners, self.ids, _ = detector.detectMarkers(gray)
-
-    #     if self.ids is not None and showIDs:
-    #         cv.aruco.drawDetectedMarkers(rgb, corners, self.ids)
-    #         plt.imshow(rgb)
-    #         plt.show()
-
-    #     if self.ids is not None:
-    #         rvecs, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-    #             corners, marker_size, self.K, self.distortion
-    #         )
-
-    #         for i, marker_id in enumerate(self.ids):
-    #             mid = int(marker_id[0])
-    #             if mid in self.ids:
-    #                 R, _ = cv.Rodrigues(rvecs[i])
-    #                 T = np.vstack(
-    #                     (np.hstack((R, tvecs[i].reshape(3, 1))), [0, 0, 0, 1]))
-
-    #                 self.Rs[mid] = R
-    #                 self.Ts[mid] = T
-
-    #                 p_cam = np.append(tvecs[i][0], 1.0)
-
-    #                 self.world_positions[mid] = (self.cam_to_world @ p_cam)[:3]
-    #                 self.world_positions[mid][2] += CUP_Z
-    #                 self.world_positions[mid] = self.world_positions[mid]
-    #                 R_corr, t_corr = self.xy_correction
-    #                 self.world_positions[mid][:2] = R_corr @ self.world_positions[mid][:2] + t_corr
-
     def find_all_markers(self, rgb, showIDs=False):
         """
         Detects ArUco/AprilTag markers and computes their poses
@@ -252,76 +210,6 @@ class CameraBase:
 
         print("Calibration complete")
         print("cam_to_world:\n", self.cam_to_world)
-
-    def _refine_xy(self, marker_positions: dict, marker_size=0.1016, num_frames=20):
-        '''
-        Runs find_all_markers pipeline on fresh frames, computes the 2D rigid transform
-        (rotation + translation) that maps average detected x,y to hardcoded x,y, and
-        stores it as self.xy_correction so find_all_markers applies it automatically.
-        '''
-        aruco_dict = cv.aruco.getPredefinedDictionary(cv.aruco.DICT_APRILTAG_36H11)
-        detector = cv.aruco.ArucoDetector(aruco_dict, cv.aruco.DetectorParameters())
-
-        sums = {mid: np.zeros(2) for mid in marker_positions}
-        counts = {mid: 0 for mid in marker_positions}
-
-        for _ in range(num_frames):
-            rgb, _ = self.get_frames()
-            if rgb is None:
-                continue
-            gray = cv.cvtColor(rgb, cv.COLOR_BGR2GRAY)
-            corners, ids, _ = detector.detectMarkers(gray)
-            if ids is None:
-                continue
-            _, tvecs, _ = cv.aruco.estimatePoseSingleMarkers(
-                corners, marker_size, self.K, self.distortion)
-            for i, mid_raw in enumerate(ids.flatten()):
-                mid = int(mid_raw)
-                if mid not in marker_positions:
-                    continue
-                p_cam = np.append(tvecs[i][0], 1.0)
-                wp = (self.cam_to_world @ p_cam)[:3]
-                wp[2] += CUP_Z
-                wp = wp * [-1, -1, 1]
-                sums[mid] += wp[:2]
-                counts[mid] += 1
-
-        detected, true_pts, valid_ids = [], [], []
-        for mid in marker_positions:
-            if counts[mid] > 0:
-                detected.append(sums[mid] / counts[mid])
-                true_pts.append(np.array(marker_positions[mid][:2], dtype=float))
-                valid_ids.append(mid)
-
-        if not detected:
-            print("Refinement: no markers detected, skipping correction")
-            return
-
-        detected = np.array(detected)
-        true_pts = np.array(true_pts)
-
-        print("Refinement before correction:")
-        for mid, d, t in zip(valid_ids, detected, true_pts):
-            print(f"  marker {mid}: detected={np.round(d,4)}, true={t}, err={np.linalg.norm(t-d):.4f}")
-
-        if len(detected) == 1:
-            R2d, t2d = np.eye(2), true_pts[0] - detected[0]
-        else:
-            d_c, t_c = detected.mean(axis=0), true_pts.mean(axis=0)
-            H = (detected - d_c).T @ (true_pts - t_c)
-            U, _, Vt = np.linalg.svd(H)
-            R2d = Vt.T @ U.T
-            if np.linalg.det(R2d) < 0:
-                Vt[-1] *= -1
-                R2d = Vt.T @ U.T
-            t2d = t_c - R2d @ d_c
-
-        self.xy_correction = (R2d, t2d)
-
-        print("Refinement after correction:")
-        for mid, d, t in zip(valid_ids, detected, true_pts):
-            corrected = R2d @ d + t2d
-            print(f"  marker {mid}: corrected={np.round(corrected,4)}, true={t}, residual={np.linalg.norm(t-corrected):.4f}")
 
     def undistort(self, img):
         return cv.undistort(img, self.K, self.distortion, None, None)
