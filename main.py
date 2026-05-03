@@ -4,13 +4,12 @@ import numpy as np
 import pyrealsense2 as rs
 import matplotlib.pyplot as plt
 import cv2 as cv
-import tkinter as tk
 from math import pi
 
 from camera import RealsenseCamera
 from camera import SimCamera
 
-from ui_helpers import make_button
+from ui_helpers import tkinter_setup
 from kinematics_helpers import (
     EndEffector,
     calc_forward_kinematics,
@@ -40,16 +39,17 @@ POUR_TAG_1_ID = 5
 POUR_TAG_2_ID = 3
 FILL_TAG_ID = 2
 
+# Cup Offsets
 FILL_CUP_OFFSET = np.array([0.10, 0.082, 0])
 POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
 
-# Cup Offsets
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
 FILL_ABOVE_OFFSET = np.array([0, 0, 0.1])
 SMALL_ABOVE_OFFSET = np.array([0, 0, 0.003])
 
 # Sim Offset
-TEST_CUP_OFFSET = np.array([0.015, 0, 0.015])
+SIM_CUP_OFFSET = np.array([0.065, 0, -0.015])
+CUP_APPROACH_OFFSET = np.array([-0.025, 0, 0])
 
 ARM_BASE = np.array([0, 0, 0])
 HOME_POSITION = np.array(
@@ -109,15 +109,15 @@ class Main(BaseApp):
 
         # Show cup positions in sim
         if self.sim_cam:
-            self.pour_cup_1[2] += 0.05
+            self.pour_cup_1[2] += 0.07
             pour_cup_1_pos = (POUR_TAG_1_POSITION + POUR_CUP_OFFSET)
-            sim_pour_cup_1 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_1_POSITION+TEST_CUP_OFFSET))
+            sim_pour_cup_1 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_1_POSITION+SIM_CUP_OFFSET))
 
-            self.pour_cup_2[2] += 0.05
+            self.pour_cup_2[2] += 0.07
             pour_cup_2_pos = (POUR_TAG_2_POSITION + POUR_CUP_OFFSET)
-            sim_pour_cup_2 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_2_POSITION+TEST_CUP_OFFSET))
+            sim_pour_cup_2 = self.kinova_robot.base_kinova.create_cup(pos=(POUR_TAG_2_POSITION+SIM_CUP_OFFSET))
 
-            self.fill_cup[2] += 0.05
+            self.fill_cup[2] += 0.07
             fill_cup_pos = (FILL_TAG_POSITION + POUR_CUP_OFFSET)
             sim_fill_cup = self.kinova_robot.base_kinova.create_cup(pos=(FILL_TAG_POSITION+POUR_CUP_OFFSET))
 
@@ -147,7 +147,7 @@ class Main(BaseApp):
                 self.state = "WAITING"
 
         elif self.state == "WAITING":
-            self.tkinter_setup()
+            tkinter_setup(self)
 
 
     def _add_pour_sequence(self, cup):
@@ -155,59 +155,51 @@ class Main(BaseApp):
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 2. down to cup
+        # 2. Move above cup
+        ee = toEE(np.append((cup + CUP_APPROACH_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 3. down to cup
         ee = toEE(np.append((cup), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 3. close gripper
+        # 4. close gripper
         if self.sim: self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
         else: self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
 
-        # 4. lift cup
+        # 5. lift cup
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 5. move above fill cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 5. move above fill cup
+        # 6. move above fill cup
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 5. move above fill cup
-        ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 6. turn cup over
+        # 7. turn cup over
         if self.sim: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,0],)))
         else: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,100],)))
 
-        # 7. move above fill again
+        # 8. move above fill again
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 5. move above fill cup
-        ee = EndEffector()
-        ee.x, ee.y, ee.z = self.fill_cup + POUR_ABOVE_OFFSET
-        ee.rotx, ee.roty, ee.rotz = 0, pi/2, 0
-        self.action_steps.append((self.move_ee, (ee,)))
-
-        # 8. return above cup
+        # 9. return above cup
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 9. lower slightly
+        # 10. lower slightly
         ee = toEE(np.append((cup + SMALL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 10. open gripper
+        # 11. open gripper
         if self.sim: self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
         else: self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
 
-        # 11. retreat
+        # 12. Move above cup
+        ee = toEE(np.append((cup + CUP_APPROACH_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 13. retreat
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
@@ -273,58 +265,9 @@ class Main(BaseApp):
         self.state = "ACTING"
         root.destroy()
 
-    def tkinter_setup(self):
-        root = tk.Tk()
-        root.geometry("800x600")
-
-        from PIL import Image, ImageTk
-        bg_img = ImageTk.PhotoImage(Image.open("menu_background.jpg").resize((800, 600)))
-
-        canvas = tk.Canvas(root, width=800, height=600, highlightthickness=0)
-        canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        canvas.create_image(0, 0, anchor="nw", image=bg_img)
-        canvas.image = bg_img
-
-        # Buttons
-        cup_1_button = make_button(
-            root=root,
-            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1]),
-            text="Water",
-            width=25,
-            height=1,
-            wraplength=0
-        )
-        cup_2_button = make_button(
-            root=root,
-            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_2]),
-            text="Water",
-            width=25,
-            height=1,
-            wraplength=0
-        )
-        mix_button = make_button(
-            root=root,
-            command=lambda *args: self.pour_cup_button(root, [self.pour_cup_1, self.pour_cup_2]),
-            text="Mixed (so still just water)",
-            width=25,
-            height=1,
-            wraplength=0
-        )
-
-        canvas.create_text(400, 295, text="Pour Cup 1", font=("Arial", 8), fill="gray")
-        canvas.create_text(400, 355, text="Pour Cup 2", font=("Arial", 8), fill="gray")
-
-        cup_1_button.place(relx=0.5, rely=0.45, anchor="center")
-        cup_2_button.place(relx=0.5, rely=0.55, anchor="center")
-        mix_button.place(relx=0.5,   rely=0.65, anchor="center")
-
-        root.mainloop()
-
-
-
 if __name__ == "__main__":
     final_project = Main(
-        simulate=False, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:

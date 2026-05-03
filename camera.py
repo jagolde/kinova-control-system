@@ -209,7 +209,6 @@ class CameraBase:
         self.xy_correction = (R2, t2)
 
         print("Calibration complete")
-        print("cam_to_world:\n", self.cam_to_world)
 
     def undistort(self, img):
         return cv.undistort(img, self.K, self.distortion, None, None)
