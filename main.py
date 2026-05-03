@@ -45,7 +45,7 @@ POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
 
 # Cup Offsets
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
-FILL_ABOVE_OFFSET = np.array([0, 0, 0.11])
+FILL_ABOVE_OFFSET = np.array([0, 0, 0.1])
 SMALL_ABOVE_OFFSET = np.array([0, 0, 0.003])
 
 # Sim Offset
