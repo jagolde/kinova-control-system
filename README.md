@@ -13,6 +13,10 @@ Upon choosing an option the interface disappears and the arm completes a queue o
 
 The current bartender bot is capable of interacting with two ingredient / pour cups, and one output / fill cup. However, the setup is built to easily enable increasing both of these. 
 
+## Video
+
+[Description Video](https://drive.google.com/file/d/1c4YKuFDERY_KlYs3a7BssGmIfhiP6BBl/view?usp=sharing)
+
 ## Bartender Bot Files
 
 This section contains descriptions the files that are either new or changed past the initial Kinova code
