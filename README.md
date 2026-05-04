@@ -1,7 +1,7 @@
 # Bartender Bot
-This is the bartender bot repository, as part of the FunRobo 2026 final project. For this project, our goal was to use the Kinova Gen3 Lite robot arm along with an Intel RealSense camera to detect a can and a cup using fiducial markers, pick up the can, pour it into the cup, and set it back down. Our MVP was to complete this process with one can and one cup, using fiducial markers for every key item, though we have expanded partially past that with this current, more refined and capable iteration.
+This is the bartender bot repository, as part of the FunRobo 2026 final project. For this project, our goal was to use the Kinova Gen3 Lite robot arm along with an Intel RealSense camera to detect a can and a cup using fiducial markers, pick up the can, pour it into the cup, and set it back down. Our MVP was to complete this process with one can and one cup, using fiducial markers for every key item, though we have expanded partially past that with this current, more refined and capable iteration using 2 cans with the option to create mixed drinks.
 
-When ran, the Kinova initially moves to its home position, out of the way, before the realsense camera above begins it's camera calibration. Using three fiducial markers with known locations on the three corners of the workspace not occupied by the base of the arm, the camera calculates its transform matrix to the world frame. It is then able to detect any other fiducial markers, calculate their positions in the world frame, and use those positions to determine the final positions of their associated object (ingredient, fill cup, etc...).
+When ran, the Kinova initially moves to its home position, out of the way, before the realsense camera above begins it's camera calibration. Using three fiducial markers with known locations on the three corners of the workspace not occupied by the base of the arm, the camera calculates its transform matrix to the world frame. It is then able to detect any other fiducial markers, calculate their positions in the world frame, and use those positions to determine the final positions of their associated object (ingredient, fill cup, etc.).
 
 One these positions have been finalized, the user is then prompted with an interface for commanding the arm. The three options available are to pour from the first pour cup into the fill cup, pour from the second pour cup into the fill cup, or pour both pour cups into the fill cup. 
 
@@ -13,9 +13,11 @@ Upon choosing an option the interface disappears and the arm completes a queue o
 
 The current bartender bot is capable of interacting with two ingredient / pour cups, and one output / fill cup. However, the setup is built to easily enable increasing both of these. 
 
-## Video
+## Resources
 
-[Description Video](https://drive.google.com/file/d/1c4YKuFDERY_KlYs3a7BssGmIfhiP6BBl/view?usp=sharing)
+[Description & Demo Video](https://drive.google.com/file/d/1c4YKuFDERY_KlYs3a7BssGmIfhiP6BBl/view?usp=sharing)
+
+[Technical Report](https://docs.google.com/document/d/1d9rYFZCzBBnlFmOuxeQhh0d6gooIUUG9wFGm-adiUNI/edit?usp=sharing)
 
 ## Bartender Bot Files
 
