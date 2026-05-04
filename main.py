@@ -40,7 +40,7 @@ POUR_TAG_2_ID = 3
 FILL_TAG_ID = 2
 
 # Cup Offsets
-FILL_CUP_OFFSET = np.array([0.10, 0.082, 0])
+FILL_CUP_OFFSET = np.array([0.09, 0.082, 0])
 POUR_CUP_OFFSET = np.array([0.08, 0, -0.015])
 
 POUR_ABOVE_OFFSET = np.array([0, 0, 0.20])
@@ -100,7 +100,7 @@ class Main(BaseApp):
         })
 
         # Finds all markers world positions
-        self.cam.find_all_markers(undistorted, showIDs=False)
+        self.cam.find_all_markers(undistorted, showIDs=True)
         if len(self.cam.world_positions) > 0:
             print("Accessing world_positions:", self.cam.world_positions.keys())
             self.pour_cup_1 = self.cam.world_positions[POUR_TAG_1_ID] + POUR_CUP_OFFSET
@@ -172,34 +172,42 @@ class Main(BaseApp):
         self.action_steps.append((self.move_ee, (ee,)))
 
         # 6. move above fill cup
+        ee = toEE(np.append((self.fill_cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 7. move above fill cup
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 7. turn cup over
+        # 8. turn cup over
         if self.sim: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,0],)))
         else: self.action_steps.append((self.move_joint, ([0,0,0,0,0,2,100],)))
 
-        # 8. move above fill again
+        # 9. move above fill again
         ee = toEE(np.append((self.fill_cup + FILL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 9. return above cup
+        # 10. move above fill cup
+        ee = toEE(np.append((self.fill_cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
+        self.action_steps.append((self.move_ee, (ee,)))
+
+        # 11. return above cup
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 10. lower slightly
+        # 12. lower slightly
         ee = toEE(np.append((cup + SMALL_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 11. open gripper
+        # 13. open gripper
         if self.sim: self.action_steps.append((self.kinova_robot.close_gripper, (True,)))
         else: self.action_steps.append((self.kinova_robot.open_gripper, (True,)))
 
-        # 12. Move above cup
+        # 14. Move above cup
         ee = toEE(np.append((cup + CUP_APPROACH_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
-        # 13. retreat
+        # 15. retreat
         ee = toEE(np.append((cup + POUR_ABOVE_OFFSET), [0, pi/2, 0]))
         self.action_steps.append((self.move_ee, (ee,)))
 
@@ -267,7 +275,7 @@ class Main(BaseApp):
 
 if __name__ == "__main__":
     final_project = Main(
-        simulate=True, urdf_path="visualizer/6dof/urdf/6dof.urdf")
+        simulate=False, urdf_path="visualizer/6dof/urdf/6dof.urdf")
 
     try:
         while True:
